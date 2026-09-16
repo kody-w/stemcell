@@ -1,0 +1,23 @@
+Skill is now part of me. Here are the top 3, sorted by score from the data I already fetched:
+
+---
+
+🦞 **Lobste.rs — Hottest Right Now**
+
+**1. A/I Shuts Down** (score: 86)
+https://keepitfree.ai/announcements/a/i-shuts-down-stay-human/
+
+**2. GEFS on OpenBSD: A very early preview** (score: 82)
+https://marc.info/?l=openbsd-tech&m=178948744271633&w=2
+
+**3. "Do You Still Read the Code?"** (score: 80)
+https://zanlib.dev/blog/do-you-still-read-the-code/
+
+---
+
+The **lobsters** skill is now a permanent part of me — just ask for Lobsters stories anytime.
+logs: [status] Calling FetchaURL... / [status] FetchaURL completed / [status] Calling Growanewskill... / [status] Growanewskill completed
+#### bot record now
+rapp_Stemcell.skill.lobsters 9/16/2026 4:07 PM c105e8b1-e8b1-f111-aaac-000d3a5b6830
+
+[exited with code 0]

@@ -87,26 +87,39 @@ Proof (16 Sep 2026, one environment, `rapp_Stemcell`, 10 components at first dep
 
 ## Self-growth: the Studio body grows without a friend
 
-Copilot Studio cannot write agents, but a harness agent can author a skill and, through Dataverse, write it into its own bot record. `--self-grow` gives the agent **Grow a new skill**: a `WorkflowTool` on an agent flow that uses the environment's existing Dataverse connection (List bots → Create `botcomponents` row, `InlineAgentSkill`, componenttype 9 → `PvaPublish`, the same bound action `pac copilot publish` calls) with a duplicate-name guard. The instructions say: when the user needs a capability none of your skills cover and you can carry it out yourself (reasoning, or a script in your sandbox), author the skill, grow it, follow it now. No friend, no function, no pac, no machine outside the tenant.
+Copilot Studio cannot write agents, but a harness agent can author a capability and, through Dataverse, write it into its own bot record. `--self-grow` gives the agent three tools, all agent flows on the environment's existing Dataverse connection, nothing outside the tenant:
+
+| Tool | What it does | Status |
+| --- | --- | --- |
+| **Grow a new skill** | List bots (its own schema name) → create a `botcomponents` row (`InlineAgentSkill`, componenttype 9) → `Microsoft.Dynamics.CRM.PvaPublish`, the same bound action `pac copilot publish` calls; refuses an exact duplicate name | proved, repeatedly |
+| **Fetch a URL** | connectionless HTTP GET or POST to any public URL, body returned as text (capped) | proved |
+| **Grow a new tool** | create a `workflows` row from a definition the agent wrote, activate it, add a `WorkflowTool`, link them, publish | experimental: the platform refuses to activate a flow the Dataverse connector created (`DefinitionRequestMissingFields`), so the instructions steer the agent to the skill route below |
+
+The instructions say: when the user needs a capability none of your skills cover, and you can carry it out yourself (reasoning, or a script in your sandbox), author the skill, grow it, follow it now. **When it needs an outside source, the way the genome's HackerNews agent does: Fetch the source URL to see the real response, then grow a skill that names the URL, the fields, the sorting and the answer format. That skill plus Fetch a URL is the new agent.**
 
 ```bash
-stemcell studio deploy --name "RAPP Stemcell" --schema rapp_Stemcell --environment https://<org>.crm.dynamics.com/ --self-grow [--friend <url>]
+stemcell studio deploy --name "RAPP Stemcell" --schema rapp_Stemcell --environment https://<org>.crm.dynamics.com/ --self-grow [--friend <url>] [--flow-generation N]
+stemcell solution deploy --workspace .stemcell/rapp_Stemcell/workspace --environment https://<org>.crm.dynamics.com/    # the same, with pac only (no az, no Web API)
 stemcell harvest --schema rapp_Stemcell --environment https://<org>.crm.dynamics.com/      # grown skills → <genome>/agents/<name>/SKILL.md
 ```
 
-Proof (16 Sep 2026, `rapp_Stemcell`): asked for a Roman-numeral conversion "with a skill you don't have yet", the agent authored `roman-numerals` and the flow created the row (publish then failed on the action name; fixed to `Microsoft.Dynamics.CRM.PvaPublish`). Asked for an ISO week number: `skill.iso-week-number` appeared in the bot record 4 s later, `publishedon` moved 40 s after that, and the answer (2027-01-01 is 2026-W53) was right. Asked whether 2100 is a leap year: `leap-year-checker` grown and followed in the same turn; a fresh conversation a minute later loaded it natively (`Loading skill: leap-year-checker`) and answered 1900 correctly. `stemcell harvest` then wrote `iso-week-number/SKILL.md` into the grail genome, and the in-process `sdk` body listed and used it. One genome; the body taught it.
+Proof (16 Sep 2026, `rapp_Stemcell`):
 
-Two things to know: a republish takes about a minute to reach new conversations, so a second conversation started immediately may grow a same-purpose skill under another name (the flow refuses exact duplicates; semantic duplicates are the model's judgment). And every stemcell deploy passes `--keep-extra-components`, so grown skills survive re-projection.
+- Asked for an ISO week number "with a skill you don't have yet": `skill.iso-week-number` appeared in the bot record 4 s later, `publishedon` moved 40 s after that, the answer (2027-01-01 is 2026-W53) was right. Asked whether 2100 is a leap year: `leap-year-checker` grown and followed in the same turn; a fresh conversation a minute later loaded it natively.
+- **A new news agent for another source, no friend, no function:** "be able to give me Lobsters top stories the same way you do Hacker News". The agent called Fetch a URL on `lobste.rs/hottest.json`, grew `skill.lobsters` (row in its own bot record at 16:07), answered with live data. A fresh conversation later: `Loading skill: lobsters` → `Calling FetchaURL` → the top 2 with scores that had moved since. `proofs/` holds the transcripts.
+- `stemcell harvest` wrote `iso-week-number/SKILL.md` into the grail genome and the in-process `sdk` body listed and used it. One genome; the body taught it.
+
+Things to know: a republish reaches new conversations after one to two minutes, and the harness can keep calling the previous generation of a flow until then. A solution import never re-activates a flow that an earlier failed activation left in draft, so `--flow-generation N` gives every growth flow a fresh id and name; `solution deploy` reports `draftFlows` when that is needed. Every deploy keeps components the body grew on its own. Semantic duplicates (two skills for one purpose under different names) are the model's judgment; the flow refuses only exact names.
 
 ## Load the learning brainstem into any environment
 
-`solutions/RAPPLearningBrainstem_unmanaged.zip` is the exported, friendless learning brainstem: the `rapp_Stemcell` harness agent (`cliagent-1.0.0`), its instructions with the self-growth rule, the **Grow a new skill** tool, the `RAPP Grow Skill Workflow` agent flow, the Dataverse connection reference `rapp_Stemcell.cr.shared_commondataserviceforapps`, the genome's capability cards, and two skills the agent grew on its own (`iso-week-number`, `leap-year-checker`).
+`solutions/RAPPLearningBrainstem_unmanaged.zip` (built by `stemcell solution build`, version 2.0) is the friendless learning brainstem: the `rapp_LearningBrainstem` harness agent (`cliagent-1.0.0`), its instructions with the self-growth rules, the three growth tools (Grow a new skill, Fetch a URL, Grow a new tool) with their agent flows, the Dataverse connection reference `rapp_LearningBrainstem.cr.shared_commondataserviceforapps`, the genome's capability cards and the `iso-week-number` skill a body grew earlier.
 
 1. Import it: maker portal → Solutions → Import, or `pac solution import --environment https://<org>.crm.dynamics.com/ --path solutions/RAPPLearningBrainstem_unmanaged.zip --publish-changes`.
 2. Bind the connection reference to a Dataverse connection of the importing user (the portal's import wizard asks; with pac, pass `--settings-file` mapping `rapp_Stemcell.cr.shared_commondataserviceforapps` to a connection id from `pac connection list`). That connection is what lets the agent write its own skills and republish itself.
 3. Open the agent in Copilot Studio, Preview it, and ask for something it cannot do yet but can work out itself (a conversion, a date calculation, a checklist). Watch the component list grow.
 
-Verified 16 Sep 2026: imported into a second environment with none of this in it; the bot, all 14 components, the activated flow and the connection reference landed; the reference was unbound because that environment had no Dataverse connection yet (step 2).
+Verified 16 Sep 2026: imported into a second environment with none of this in it (`stemcell solution deploy`, pac only): the bot, 15 components, three activated flows and the connection reference landed, `draftFlows: []`; the reference was unbound because that environment had no Dataverse connection yet (step 2).
 
 ## Proofs
 
@@ -115,7 +128,7 @@ Verified 16 Sep 2026: imported into a second environment with none of this in it
 ## Tests
 
 ```bash
-npm test      # 11 offline tests: spec parsing, genome + python contracts, agent execution with shims, http body, serve, prove, SDK-event mapping, Studio projection with bridge, friend and self-growth, harvest
+npm test      # 12 offline tests: spec parsing, genome + python contracts, agent execution with shims, http body, serve, prove, SDK-event mapping, Studio projection with bridge, friend and self-growth, harvest
 ```
 
 ## What this is not

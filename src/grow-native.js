@@ -162,7 +162,8 @@ export async function buildSelfGrowth(schemaName, workspace, opts = {}) {
             'item/category': 5, 'item/type': 1, 'item/mode': 0, 'item/scope': 4, 'item/primaryentity': 'none', 'item/modernflowtype': 0, 'item/clientdata': "@outputs('Client_data')",
             'item/xaml': '@null'   // the Dataverse connector marks xaml required on workflows; an empty string makes activation look for a classic definition, so send null
           }),
-          Activate_flow: { runAfter: { Create_flow: ['Succeeded'] }, ...dv('UpdateRecord', { entityName: 'workflows', recordId: "@body('Create_flow')?['workflowid']", 'item/statecode': 1, 'item/statuscode': 2 }) },
+          // a row created through the connector is not provisioned in the flow service yet; activation must carry the definition again
+          Activate_flow: { runAfter: { Create_flow: ['Succeeded'] }, ...dv('UpdateRecord', { entityName: 'workflows', recordId: "@body('Create_flow')?['workflowid']", 'item/clientdata': "@outputs('Client_data')", 'item/statecode': 1, 'item/statuscode': 2 }) },
           Tool_yaml: { runAfter: { Activate_flow: ['Succeeded'] }, type: 'Compose', inputs: `@{concat('kind: WorkflowTool', ${NL}, 'workflowId: ', body('Create_flow')?['workflowid'], ${NL}, trim(triggerBody()?['tool_yaml']), ${NL})}` },
           Create_tool: { runAfter: { Tool_yaml: ['Succeeded'] }, ...dv('CreateRecord', {
             entityName: 'botcomponents', 'item/name': "@outputs('Skill_name')", 'item/schemaname': `@concat('${schemaName}.tool.', outputs('Skill_name'))`,
@@ -193,17 +194,21 @@ export async function buildSelfGrowth(schemaName, workspace, opts = {}) {
   const fetchOutSchema = { type: 'object', properties: { status: { type: 'string' }, status_code: { type: 'integer' }, body: { type: 'string' } } };
   const fetchDefinition = {
     $schema, contentVersion: '1.0.0.0', parameters: { $authentication: { defaultValue: {}, type: 'SecureObject' } },
-    triggers: skillsTrigger({ url: prop('url', 'The https URL to GET (a public JSON API, a raw GitHub file such as a RAR agent.py, a feed).') }, ['url']),
+    triggers: skillsTrigger({
+      url: prop('url', 'The https URL (a public JSON API, a raw GitHub file such as a RAR agent.py, a feed).'),
+      method: prop('method', 'GET (default) or POST.'),
+      body: prop('body', 'Optional request body for POST, as a JSON string.')
+    }, ['url']),
     actions: {
-      Fetch: { type: 'Http', inputs: { method: 'GET', uri: "@triggerBody()?['url']", headers: { 'User-Agent': 'RAPP-Stemcell-Fetch/1.0', Accept: 'application/json, text/plain, */*' } } },
+      Fetch: { type: 'Http', inputs: { method: "@coalesce(triggerBody()?['method'], 'GET')", uri: "@triggerBody()?['url']", headers: { 'User-Agent': 'RAPP-Stemcell-Fetch/1.0', Accept: 'application/json, text/plain, */*', 'Content-Type': 'application/json' }, body: "@if(empty(triggerBody()?['body']), null, triggerBody()?['body'])" } },
       Body_text: { runAfter: { Fetch: ['Succeeded', 'Failed'] }, type: 'Compose', inputs: "@if(greater(length(string(body('Fetch'))), 12000), concat(substring(string(body('Fetch')), 0, 12000), decodeUriComponent('%0A'), '[truncated at 12000 characters]'), string(body('Fetch')))" },
       Respond: respond({ Body_text: ['Succeeded'] }, { status: "@if(equals(outputs('Fetch')?['statusCode'], 200), 'success', 'error')", status_code: "@outputs('Fetch')?['statusCode']", body: "@outputs('Body_text')" }, fetchOutSchema)
     }
   };
   writeFlow(workspace, FETCH_FOLDER, fetchId, flowName('RAPP Fetch URL Workflow'), 'Connectionless HTTP GET of a public URL, returned as text (capped at 12000 characters).', fetchDefinition, null);
   writeTool(workspace, 'FetchUrl.mcs.yml', FETCH_TOOL,
-    'Reads a public URL (a JSON API, a raw GitHub file such as a RAR agent.py, a feed) and returns the body as text. Use before growing a tool, to see the real response shape, or whenever the user asks for live data from a public URL you have no tool for.',
-    fetchId, [['url', 'The https URL to GET.']], ['status', 'status_code', 'body']);
+    'Calls a public URL (a JSON API, a raw GitHub file such as a RAR agent.py, a feed) and returns the body as text. This is how you reach any outside source: skills you grow for a news feed or an API call this tool with the source URL and then format the result.',
+    fetchId, [['url', 'The https URL.'], ['method', 'GET (default) or POST.'], ['body', 'Optional JSON request body for POST.']], ['status', 'status_code', 'body']);
 
   return { id: skillId, folder: `${GROW_FOLDER}-${skillId}`, tool: GROW_TOOL, connectionReference: ref,
     tools: [{ tool: GROW_TOOL, id: skillId }, { tool: GROW_AGENT_TOOL, id: toolId }, { tool: FETCH_TOOL, id: fetchId }] };
@@ -214,7 +219,8 @@ export function selfGrowthInstructions(hasFriend) {
   return [
     `You can grow. When the user asks for something none of your skills or tools cover:`,
     `- If you can do it yourself (reasoning, or a script run in your sandbox): author a skill and call "${GROW_TOOL}" with name (lowercase, hyphens), a one-sentence description, and instructions (numbered steps you can follow yourself, the script if any, the exact answer format). Then carry out the request by following the new skill immediately, and say the skill is now part of you.`,
-    `- If it needs live data from a public URL (a news feed, a JSON API, anything like the HackerNews agent but for another source): first call "${FETCH_TOOL}" on the source URL to see the real response shape (and, when a RAPP Agent Registry agent.py exists for it, fetch that raw file as a reference implementation). Then author an agent flow definition (a JSON object: "triggers" and "actions" are objects keyed by name, never arrays; a Request trigger named manual of kind Skills with the inputs; one or more Http GET actions; every action except the first with runAfter naming the previous action; a final Response of kind Skills returning a small, well-named JSON object built with expressions like @take(body('Fetch'), 5)) and the matching tool_yaml, and call "${GROW_AGENT_TOOL}". If it answers with status error, fix exactly what its message says and call it once more. Then call the new tool to answer the user, and say the tool is now part of you.`,
+    `- If it needs live data from a public URL (a news feed, a JSON API, anything like the HackerNews agent but for another source): call "${FETCH_TOOL}" on the source URL to see the real response shape (and, when a RAPP Agent Registry agent.py exists for it, fetch that raw file as the reference implementation). Then grow a SKILL for that source with "${GROW_TOOL}": its instructions name the exact URL(s) to call with "${FETCH_TOOL}", the fields to read from the response, the sorting or filtering the reference does, and the answer format. Answer the user by following it, and say the agent is now part of you. That skill plus "${FETCH_TOOL}" is the agent; it needs no function and no friend.`,
+    `- "${GROW_AGENT_TOOL}" (a dedicated agent flow per source) is experimental: the platform may refuse to activate a flow created this way. Prefer the skill route above; use the tool route only when the user explicitly asks for a dedicated flow.`,
     `- Flows you grow are connectionless: use only Http actions to public endpoints, Compose, Select, Filter, If, and expressions. Never reference a connection or a custom connector; those need a person to create a connection.`,
     `- Grown capabilities reach new conversations about a minute after growing; in this conversation use them right away.`,
     hasFriend

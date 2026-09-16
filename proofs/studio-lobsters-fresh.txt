@@ -1,0 +1,13 @@
+🦞 **Lobste.rs — Hottest Right Now** *(top 2 by score)*
+
+**1. A/I Shuts Down** (score: 87)
+https://keepitfree.ai/announcements/a/i-shuts-down-stay-human/
+
+**2. GEFS on OpenBSD: A very early preview** (score: 82)
+https://marc.info/?l=openbsd-tech&m=178948744271633&w=2
+
+---
+Used the **lobsters** skill.
+logs: [status] Loading Agent... / [status] Loading skill... / [status] Loading skill: lobsters... / [status] Calling FetchaURL... / [status] FetchaURL completed
+
+[exited with code 0]
