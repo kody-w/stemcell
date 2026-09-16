@@ -14,7 +14,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execSync } from 'node:child_process';
 
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const yamlValue = (text, key) => (String(text).match(new RegExp(`^${key}:\\s*(.+)$`, 'm')) || [])[1]?.trim().replace(/^"(.*)"$/, '$1');
@@ -136,13 +136,42 @@ export function packSolution(folder, zipPath) {
   return pac(['solution', 'pack', '--zipfile', zipPath, '--folder', folder, '--packagetype', 'Unmanaged']);
 }
 
+/**
+ * Delete bot components by schema name through the Dataverse Web API.
+ * A solution import updates and adds, never removes, so a capability the projection has DROPPED
+ * (a python agent card, a skill that needs a host) lives on and the agent keeps offering it.
+ * Only names the caller passes are touched, so anything the body grew on its own is safe.
+ */
+export async function pruneComponents(environment, botId, schemaNames, tokenCommand) {
+  if (!schemaNames?.length) return { pruned: [], failed: [] };
+  const base = environment.replace(/\/+$/, '') + '/api/data/v9.2/';
+  const token = execSync(tokenCommand || `az account get-access-token --resource ${environment} --query accessToken -o tsv`, { encoding: 'utf8' }).trim();
+  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'OData-Version': '4.0' };
+  const filter = `_parentbotid_value eq ${botId}`;
+  const r = await fetch(`${base}botcomponents?$select=botcomponentid,schemaname&$filter=${encodeURIComponent(filter)}`, { headers });
+  if (!r.ok) return { pruned: [], failed: [{ why: `list → ${r.status}` }] };
+  const live = (await r.json()).value || [];
+  const wanted = new Set(schemaNames);
+  const pruned = [], failed = [];
+  for (const c of live.filter((c) => wanted.has(c.schemaname))) {
+    const d = await fetch(`${base}botcomponents(${c.botcomponentid})`, { method: 'DELETE', headers });
+    (d.ok ? pruned : failed).push(d.ok ? c.schemaname : { name: c.schemaname, why: `delete → ${d.status}` });
+  }
+  return { pruned, failed };
+}
+
 /** Import (create or update) with pac; then publish the bot with pac copilot publish (its id read with pac env fetch). */
-export function importSolution(zipPath, environment, schemaName, opts = {}) {
+export async function importSolution(zipPath, environment, schemaName, opts = {}) {
   /** @type {string[]} */ const draftFlows = [];
   const imp = pac(['solution', 'import', '--environment', environment, '--path', zipPath, '--force-overwrite', '--publish-changes', ...(opts.settingsFile ? ['--settings-file', opts.settingsFile] : [])]);
   if (!imp.ok) return { ok: false, step: 'import', out: imp.out };
   const fetch = pac(['env', 'fetch', '--environment', environment, '--xml', `<fetch><entity name='bot'><attribute name='botid'/><attribute name='publishedon'/><filter><condition attribute='schemaname' operator='eq' value='${schemaName}'/></filter></entity></fetch>`]);
   const botId = (fetch.out.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0] || null;
+  let pruned = null;
+  if (botId && opts.prune?.length) {
+    try { pruned = await pruneComponents(environment, botId, opts.prune, opts.tokenCommand); }
+    catch (e) { pruned = { pruned: [], failed: [{ why: e.message.split('\n')[0] }] }; }
+  }
   let publish = null;
   if (botId && opts.publish !== false) {
     // pac 2.10 sometimes dies after the publish request was accepted; the request still goes through
@@ -160,5 +189,6 @@ export function importSolution(zipPath, environment, schemaName, opts = {}) {
     if (/\bDraft\b/.test(st.out)) draftFlows.push(id);
   }
   return { ok: true, step: 'done', botId, importOut: imp.out.trim().split('\n').slice(-2).join(' '), published: publish ? (/Published successfully/i.test(publish.out) || !!publish.publishedon) : null,
+    ...(pruned ? { pruned: pruned.pruned, pruneFailed: pruned.failed } : {}),
     draftFlows, ...(draftFlows.length ? { hint: 'a flow stayed in draft: rebuild with a higher --flow-generation so it gets a fresh id, then deploy again' } : {}) };
 }

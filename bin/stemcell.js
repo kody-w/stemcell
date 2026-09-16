@@ -19,7 +19,7 @@
  * Bodies: http://host:port | sdk | sdk:<genome> | headless:<host:port>[:<genome>] | studio:<envId>/<schema> | directline:<envId>/<schema>
  * Options: --model auto|<id>  --execute off|all  --timeout-ms N  --genome <dir> (sdk/headless)
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { shapeshift, parseSpec, BODIES } from '../src/brainstem.js';
@@ -141,13 +141,17 @@ try {
       if (!['build', 'deploy'].includes(action) || !flags.workspace) usage();
       const outDir = flags['out-dir'] || join(dirname(flags.workspace), 'solution');
       const built = buildSolutionFolder(flags.workspace, { outDir, publisherPrefix: flags['publisher-prefix'], solutionName: flags['solution-name'], version: flags.version });
+      // what an earlier projection put on the record and this one no longer does
+      const buildJson = join(dirname(flags.workspace), 'BUILD.json');
+      const prune = flags.prune ? flags.prune.split(',').map((n) => n.trim()).filter(Boolean)
+        : existsSync(buildJson) ? (JSON.parse(readFileSync(buildJson, 'utf8')).skipped || []).map((s) => `${built.schemaName}.skill.${String(s.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`) : [];
       const zip = flags.out || join(dirname(outDir), `${built.solutionName}.zip`);
       const packed = packSolution(built.folder, zip);
       if (!packed.ok) { console.error(packed.out); process.exit(1); }
       console.log(`packed ${zip}: bot ${built.schemaName}, ${built.components.length} components, ${built.workflows.length} flows, ${built.connectionReferences.length} connection references`);
       if (action === 'deploy') {
         if (!flags.environment) usage();
-        const r = importSolution(zip, flags.environment, built.schemaName, { settingsFile: flags['settings-file'], publish: flags.publish !== 'false', workflowIds: built.workflows.map((w) => w.id) });
+        const r = await importSolution(zip, flags.environment, built.schemaName, { settingsFile: flags['settings-file'], publish: flags.publish !== 'false', workflowIds: built.workflows.map((w) => w.id), prune, tokenCommand: flags['token-command'] });
         console.log(JSON.stringify(r, null, 2));
         process.exitCode = r.ok ? 0 : 1;
       }

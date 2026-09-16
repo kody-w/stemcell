@@ -195,7 +195,7 @@ export async function buildSelfGrowth(schemaName, workspace, opts = {}) {
   const fetchDefinition = {
     $schema, contentVersion: '1.0.0.0', parameters: { $authentication: { defaultValue: {}, type: 'SecureObject' } },
     triggers: skillsTrigger({
-      url: prop('url', 'The https URL (a public JSON API, a raw GitHub file such as a RAR agent.py, a feed).'),
+      url: prop('url', 'The https URL (a public JSON API, a raw GitHub file such as a registry reference implementation, a feed).'),
       method: prop('method', 'GET (default) or POST.'),
       body: prop('body', 'Optional request body for POST, as a JSON string.')
     }, ['url']),
@@ -207,7 +207,7 @@ export async function buildSelfGrowth(schemaName, workspace, opts = {}) {
   };
   writeFlow(workspace, FETCH_FOLDER, fetchId, flowName('RAPP Fetch URL Workflow'), 'Connectionless HTTP GET of a public URL, returned as text (capped at 12000 characters).', fetchDefinition, null);
   writeTool(workspace, 'FetchUrl.mcs.yml', FETCH_TOOL,
-    'Calls a public URL (a JSON API, a raw GitHub file such as a RAR agent.py, a feed) and returns the body as text. This is how you reach any outside source: skills you grow for a news feed or an API call this tool with the source URL and then format the result.',
+    'Calls a public URL (a JSON API, a raw GitHub file such as a registry reference implementation, a feed) and returns the body as text. This is how you reach any outside source: skills you grow for a news feed or an API call this tool with the source URL and then format the result.',
     fetchId, [['url', 'The https URL.'], ['method', 'GET (default) or POST.'], ['body', 'Optional JSON request body for POST.']], ['status', 'status_code', 'body']);
 
   return { id: skillId, folder: `${GROW_FOLDER}-${skillId}`, tool: GROW_TOOL, connectionReference: ref,
@@ -219,7 +219,7 @@ export function selfGrowthInstructions(hasFriend) {
   return [
     `You can grow. When the user asks for something none of your skills or tools cover:`,
     `- If you can do it yourself (reasoning, or a script run in your sandbox): author a skill and call "${GROW_TOOL}" with name (lowercase, hyphens), a one-sentence description, and instructions (numbered steps you can follow yourself, the script if any, the exact answer format). Then carry out the request by following the new skill immediately, and say the skill is now part of you.`,
-    `- If it needs live data from a public URL (a news feed, a JSON API, anything like the HackerNews agent but for another source): call "${FETCH_TOOL}" on the source URL to see the real response shape (and, when a RAPP Agent Registry agent.py exists for it, fetch that raw file as the reference implementation). Then grow a SKILL for that source with "${GROW_TOOL}": its instructions name the exact URL(s) to call with "${FETCH_TOOL}", the fields to read from the response, the sorting or filtering the reference does, and the answer format. Answer the user by following it, and say the agent is now part of you. That skill plus "${FETCH_TOOL}" is the agent; it needs no function and no friend.`,
+    `- If it needs live data from a public URL (a news feed, a JSON API, anything like the HackerNews agent but for another source): call "${FETCH_TOOL}" on the source URL to see the real response shape (and, when the public RAPP Agent Registry has a reference implementation for that source, fetch its raw file over HTTP too and copy its logic). Then grow a SKILL for that source with "${GROW_TOOL}": its instructions name the exact URL(s) to call with "${FETCH_TOOL}", the fields to read from the response, the sorting or filtering the reference does, and the answer format. Answer the user by following it, and say the agent is now part of you. That skill plus "${FETCH_TOOL}" is the agent; it needs no function and no friend.`,
     `- "${GROW_AGENT_TOOL}" (a dedicated agent flow per source) is experimental: the platform may refuse to activate a flow created this way. Prefer the skill route above; use the tool route only when the user explicitly asks for a dedicated flow.`,
     `- Flows you grow are connectionless: use only Http actions to public endpoints, Compose, Select, Filter, If, and expressions. Never reference a connection or a custom connector; those need a person to create a connection.`,
     `- Grown capabilities reach new conversations about a minute after growing; in this conversation use them right away.`,

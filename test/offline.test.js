@@ -14,6 +14,7 @@ import { buildStudioWorkspace } from '../src/studio-workspace.js';
 import { createHarnessBody } from '../src/bodies/harness.js';
 import { skillMarkdownFromComponentData } from '../src/harvest.js';
 import { buildSolutionFolder, readSettings } from '../src/solution.js';
+import { sanitizeSoulForStudio, portableToStudio } from '../src/studio-workspace.js';
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'genome');
 
@@ -176,9 +177,10 @@ test('a genome projects onto a Copilot Studio harness workspace, with or without
   assert.match(settings, /template: cliagent-1\.0\.0/);
   assert.match(settings, /kind: CLICopilotRecognizer/);
   assert.match(settings, /You are Fixture, a test brainstem/);
-  assert.deepEqual(plain.components.map((c) => c.name).sort(), ['echo', 'hello-skill']);
+  assert.deepEqual(plain.components.map((c) => c.name).sort(), ['hello-skill'], 'a python agent is not projected without a friend or bridge');
+  assert.deepEqual(plain.skipped.map((s) => s.name), ['Echo']);
   assert.match(readFileSync(join(plain.workspace, 'behaviors', 'hello-skill.mcs.yml'), 'utf8'), /kind: InlineAgentSkill[\s\S]*Reply with exactly/);
-  assert.match(readFileSync(join(plain.workspace, 'behaviors', 'echo.mcs.yml'), 'utf8'), /class EchoAgent/);
+
   const bridged = await buildStudioWorkspace(g, { name: 'Fixture Twin', schemaName: 'rapp_FixtureTwin', workDir, bridgeUrl: 'shared_rapp-brainstem-5f1234' });
   assert.deepEqual(bridged.components.map((c) => c.kind).sort(), ['InlineAgentSkill', 'McpTool']);
   const tool = readFileSync(join(bridged.workspace, 'capabilities', 'tools', 'RAPPBrainstem.mcs.yml'), 'utf8');
@@ -270,4 +272,33 @@ test('a workspace projects onto an importable solution folder (pac-only path)', 
   assert.equal((solXml.match(/<RootComponent type="29"/g) || []).length, 3);
   assert.match(readFileSync(join(sol.folder, 'Assets', 'botcomponent_workflowset.xml'), 'utf8'), /rapp_FixtureTwin\.tool\.GrowSkill/);
   assert.ok(existsSync(join(sol.folder, 'Workflows')) && readdirSync(join(sol.folder, 'Workflows')).some((f) => f.endsWith('.json.data.xml')));
+});
+
+test('the Studio projection drops every claim to a machine it does not have', async () => {
+  const soul = [
+    '# a header comment', '',
+    '## Identity', '', 'You are a local-first assistant running on the user\'s own machine.', '',
+    '## Personality', '', '- Direct and concise', '- Honest about limits', '',
+    '## What You Know', '', '- The user may be at any stage:', '  - **Tier 2 — Hippocampus**: Azure Functions', '',
+    '## Tier 2 — The Hippocampus', '', 'Give them the one-liner:', '```', 'curl -fsSL https://x/install.sh | bash', '```', ''
+  ].join('\n');
+  const r = sanitizeSoulForStudio(soul);
+  assert.match(r.text, /## Personality/);
+  assert.match(r.text, /Direct and concise/);
+  for (const gone of [/Identity/, /own machine/, /Tier/i, /Hippocampus/i, /one-?liner/, /curl/, /Azure/]) assert.ok(!gone.test(r.text), `leaked ${gone}`);
+  assert.ok(!/may be at any stage/.test(r.text), 'a lead-in must not outlive its own bullets');
+  assert.ok(r.dropped.includes('install tiers') && r.dropped.includes('a local machine'));
+
+  assert.equal(portableToStudio('Read ~/Documents/notes and summarize.').ok, false);
+  assert.equal(portableToStudio('Run `python3 scripts/check.py`').ok, false);
+  assert.equal(portableToStudio('Call Fetch a URL on https://lobste.rs/hottest.json and list the top 3 by score.').ok, true);
+
+  const g = await readGenome(FIXTURE);
+  const workDir = mkdtempSync(join(tmpdir(), 'stemcell-'));
+  const built = await buildStudioWorkspace(g, { name: 'Fixture Twin', schemaName: 'rapp_FixtureTwin', workDir, selfGrow: true });
+  assert.ok(!built.components.some((c) => c.name === 'echo'), 'a python agent is not projected without a friend');
+  assert.deepEqual(built.skipped.map((s) => s.name), ['Echo']);
+  assert.match(built.instructions, /no python/);
+  const withFriend = await buildStudioWorkspace(g, { name: 'Fixture Twin', schemaName: 'rapp_FixtureTwin', workDir, friend: { url: 'https://friend.example.com/' } });
+  assert.ok(withFriend.components.some((c) => c.name === 'echo'), 'with a friend the agent card is real routing');
 });

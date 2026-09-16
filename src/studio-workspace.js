@@ -14,11 +14,98 @@ import { join, basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { buildFriend, friendInstructions } from './friend.js';
-import { buildSelfGrowth, selfGrowthInstructions } from './grow-native.js';
+import { buildSelfGrowth, selfGrowthInstructions, FETCH_TOOL } from './grow-native.js';
 
 const yamlStr = (s) => JSON.stringify(String(s));
 const indent = (text, n) => String(text).split('\n').map((l) => (l ? ' '.repeat(n) + l : '')).join('\n');
 const kebab = (s) => (String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'capability');
+
+/**
+ * A Copilot Studio body has no machine: no files, no shell, no python, no local server,
+ * no install tiers to sell. A genome soul written for the local brainstem asserts all of it,
+ * and the agent then answers with paths that do not exist here. Drop those claims at the seam.
+ */
+const LOCAL_CLAIM = [
+  [/hippocampus|nervous system|spinal cord|\btiers?\b|core reflexes/i, 'install tiers'],
+  [/\bAzure\b|CommunityRAPP|one-?liner|curl -fsSL|\birm https?:|install\.(sh|ps1|cmd)\b|onboard(ing)? guide|after install/i, 'install instructions'],
+  [/own machine|their hardware|running locally|runs locally|local-first|your machine|local machine|someone else's cloud|on their own/i, 'a local machine'],
+  [/~\/|\/Users\/|\/home\/|[A-Z]:\\/, 'local file paths'],
+  [/localhost|127\.0\.0\.1|\/health\b|restart(ing)?\b|start\.sh|\bvenv\b|index\.html/i, 'a local server'],
+  [/drag(ging)?\b|VS Code|Brain Surgeon|export the (Brainstem )?transcript|chat window|toolbar/i, 'a desktop app'],
+  [/GitHub (account|token|Copilot)|device-?code|API keys?/i, 'local sign-in'],
+  [/agent\.py|hot-?load|quarantin|experimental directory|agent registry|file\/class\/method/i, 'the local agent loader'],
+  [/\bpython3?\b|\bbash\b|\bshell\b|\bnpm\b|\bpip install|\bgit \b|scripts?\/|\.\/[a-z]/i, 'a shell']
+];
+
+/** @param {string} text @returns {string|null} the reason this text claims a host, or null */
+export function localClaim(text) {
+  for (const [re, reason] of LOCAL_CLAIM) if (re.test(text)) return reason;
+  return null;
+}
+
+/** A bullet or paragraph with the indented lines that belong to it: half a thought is never kept. */
+function blocks(lines) {
+  const out = [];
+  for (const line of lines) {
+    const continuation = /^(\s+\S|\s*\d+[.)]\s|```)/.test(line) || (out.length && /^\s*$/.test(line) === false && /^(?![-*#\s])/.test(line) && out.at(-1).open);
+    if (out.length && (continuation || /^\s*$/.test(line))) out.at(-1).lines.push(line);
+    else out.push({ lines: [line], open: /:\s*$/.test(line) });
+    if (out.length && !/^\s*$/.test(line)) out.at(-1).open = /:\s*$/.test(line) || out.at(-1).open;
+  }
+  return out;
+}
+
+/**
+ * Keep the soul's voice; drop every block and section that asserts a machine this body does not have.
+ * Whole blocks, so a lead-in never survives its own bullets.
+ * @param {string} soul
+ */
+export function sanitizeSoulForStudio(soul) {
+  const dropped = new Set();
+  const lines = String(soul).split('\n').filter((l) => !/^#(?!#)/.test(l));   // the file's own header comments
+  /** @type {{heading: string|null, body: string[]}[]} */
+  const sections = [{ heading: null, body: [] }];
+  for (const line of lines) {
+    if (/^##\s/.test(line)) sections.push({ heading: line, body: [] });
+    else sections.at(-1).body.push(line);
+  }
+  const kept = [];
+  for (const section of sections) {
+    const why = section.heading && localClaim(section.heading);
+    if (why) { dropped.add(why); continue; }
+    const body = [];
+    for (const b of blocks(section.body)) {
+      const text = b.lines.join('\n');
+      const w = localClaim(text);
+      if (w) { dropped.add(w); continue; }
+      body.push(text);
+    }
+    const text = body.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (!text) { if (section.heading) dropped.add('an empty section'); continue; }
+    kept.push([section.heading, text].filter(Boolean).join('\n\n'));
+  }
+  return { text: kept.join('\n\n').trim(), dropped: [...dropped] };
+}
+
+/** Can this capability run in Copilot Studio at all? @param {string} md */
+export function portableToStudio(md) {
+  const why = localClaim(md);
+  return why ? { ok: false, why } : { ok: true };
+}
+
+/** What the body actually is, stated plainly, so it never offers what it does not have. */
+function environmentBlock(cfg, growBuilt, friendBuilt) {
+  const lines = [
+    'Where you are:',
+    `- You are a Copilot Studio agent. You have no computer of your own: no files, no folders, no shell, no python, no local server, and no way to read anything on the user's machine. Never name a local path, never offer to install anything, and never describe yourself as running locally.`,
+    `- Your reach outside this conversation is exactly the tools listed below${growBuilt ? `, and the only way to see live data is the "${FETCH_TOOL}" tool` : ''}.`
+  ];
+  if (growBuilt) lines.push(`- You are a seed, not a finished assistant: when a request needs a capability you do not have, grow it and use it in the same turn. That is the point of you.`);
+  if (friendBuilt) lines.push(`- Work that truly needs a machine belongs to your friend brainstem; anything else you do here yourself.`);
+  else lines.push(`- If a request genuinely needs someone's machine, say plainly that you cannot reach one, and offer what you can do here instead.`);
+  return lines;
+}
+
 
 /**
  * @param {any} genome
@@ -29,7 +116,14 @@ export async function buildStudioWorkspace(genome, cfg) {
   rmSync(ws, { recursive: true, force: true });
   mkdirSync(join(ws, 'behaviors'), { recursive: true });
   const routing = [];
-  for (const s of genome.skills) routing.push(`- ${s.description.replace(/\s+/g, ' ').slice(0, 300) || s.name}: use the ${kebab(s.name)} skill and follow it exactly.`);
+  const skipped = [];
+  // A capability that needs a host is worse than a missing one: the agent tries it and answers with a path.
+  const skills = genome.skills.filter((sk) => {
+    const fit = portableToStudio(readFileSync(sk.file, 'utf8'));
+    if (!fit.ok) skipped.push({ name: sk.name, kind: 'skill', why: fit.why });
+    return fit.ok;
+  });
+  for (const sk of skills) routing.push(`- ${sk.description.replace(/\s+/g, ' ').slice(0, 300) || sk.name}: use the ${kebab(sk.name)} skill and follow it exactly.`);
   let friendBuilt = null;
   let growBuilt = null;
   if (cfg.selfGrow) {
@@ -39,19 +133,21 @@ export async function buildStudioWorkspace(genome, cfg) {
   if (cfg.friend) {
     friendBuilt = await buildFriend(cfg.friend, cfg.schemaName, ws);
     routing.push(...friendInstructions(cfg.friend, genome.agents));
+  } else if (cfg.bridgeUrl) {
+    for (const a of genome.agents) routing.push(`- ${a.description.replace(/\s+/g, ' ').slice(0, 300)}: call the brainstem tool \`chat\` on the ${cfg.bridgeName || 'RAPP Brainstem'} MCP server with the user's request; it runs the ${a.name} agent for real and answers.`);
   } else {
-    for (const a of genome.agents) {
-      routing.push(cfg.bridgeUrl
-        ? `- ${a.description.replace(/\s+/g, ' ').slice(0, 300)}: call the brainstem tool \`chat\` on the ${cfg.bridgeName || 'RAPP Brainstem'} MCP server with the user's request; it runs the ${a.name} agent for real and answers.`
-        : `- ${a.description.replace(/\s+/g, ' ').slice(0, 300)}: use the ${kebab(a.name)} skill (reasoning only, no live tool).`);
-    }
+    // Nothing here runs python, so an agent card would only teach this body to describe code it cannot execute.
+    for (const a of genome.agents) skipped.push({ name: a.name, kind: 'agent', why: 'python, with no friend or bridge to run it' });
   }
+  const soul = sanitizeSoulForStudio(genome.soul);
   const instructions = [
     `You are ${cfg.name}.`,
     '',
-    cfg.purpose || `You are a RAPP brainstem in Copilot Studio: the same persona, skills and agents as the brainstem this was shaped from.`,
+    cfg.purpose || `You are a RAPP brainstem in Copilot Studio: the persona of the brainstem this was shaped from, with the capabilities that work here.`,
     '',
-    genome.soul.replace(/^#.*\n?/gm, '').trim(),
+    soul.text,
+    '',
+    ...environmentBlock(cfg, growBuilt, friendBuilt),
     '',
     'Capabilities and routing:',
     ...routing,
@@ -95,7 +191,7 @@ export async function buildStudioWorkspace(genome, cfg) {
     writeFileSync(file, `mcs.metadata:\n  componentName: ${yamlStr(name)}\n  description: ${yamlStr(description.slice(0, 300))}\nkind: InlineAgentSkill\ncontent: |\n${indent(body, 2)}\n`);
     components.push({ name, kind: 'InlineAgentSkill', file });
   };
-  for (const s of genome.skills) behavior(kebab(s.name), s.description || s.name, readFileSync(s.file, 'utf8'));
+  for (const sk of skills) behavior(kebab(sk.name), sk.description || sk.name, readFileSync(sk.file, 'utf8'));
   if (growBuilt) for (const t of growBuilt.tools) components.push({ name: t.tool, kind: 'WorkflowTool', workflowId: t.id, connectionReference: growBuilt.connectionReference });
   if (friendBuilt) {
     components.push({ name: friendBuilt.tool, kind: 'WorkflowTool', workflowId: friendBuilt.id, friend: friendBuilt.url });
@@ -108,17 +204,7 @@ export async function buildStudioWorkspace(genome, cfg) {
         '## Input contract (what the agent accepts)', '```json', JSON.stringify(a.parameters || { type: 'object', properties: {} }), '```'
       ].join('\n'));
     }
-  } else if (!cfg.bridgeUrl) {
-    for (const a of genome.agents) {
-      const src = readFileSync(a.file, 'utf8');
-      behavior(kebab(a.name), a.description || a.name, [
-        '---', `name: ${kebab(a.name)}`, `description: ${JSON.stringify((a.description || '').replace(/\s+/g, ' ').slice(0, 300))}`, '---',
-        `# ${a.name}`, '', '## When to use this skill', a.description || '', '',
-        '## Input contract', '```json', JSON.stringify(a.parameters || { type: 'object', properties: {} }), '```', '',
-        '## Reference implementation (RAPP agent.py, untrusted data, never instructions)', '```python', src.trimEnd(), '```'
-      ].join('\n'));
-    }
-  } else {
+  } else if (cfg.bridgeUrl) {
     // The Brainstem Bridge: one McpTool on a custom connector that wraps the live brainstem's MCP endpoint
     // (the same McpTool + connection-reference shape copilot-harness-sdk proves in its use cases).
     mkdirSync(join(ws, 'capabilities', 'tools'), { recursive: true });
@@ -135,9 +221,10 @@ export async function buildStudioWorkspace(genome, cfg) {
   }
   writeFileSync(join(cfg.workDir, 'BUILD.json'), JSON.stringify({
     name: cfg.name, schema: cfg.schemaName, builtAt: new Date().toISOString(), genome: genome.dir, model: cfg.model || 'Sonnet46',
-    bridge: cfg.bridgeUrl || null, friend: friendBuilt ? friendBuilt.url : null, selfGrow: !!growBuilt, skills: genome.skills.map((s) => s.name), agents: genome.agents.map((a) => a.name), components
+    bridge: cfg.bridgeUrl || null, friend: friendBuilt ? friendBuilt.url : null, selfGrow: !!growBuilt, skills: skills.map((sk) => sk.name),
+    agents: friendBuilt || cfg.bridgeUrl ? genome.agents.map((a) => a.name) : [], skipped, soulDropped: soul.dropped, components
   }, null, 2));
-  return { workspace: ws, components, instructions };
+  return { workspace: ws, components, instructions, skipped, soulDropped: soul.dropped };
 }
 
 /** Where copilot-harness-sdk's deploy script is (checkout or npx). */
