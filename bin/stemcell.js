@@ -9,8 +9,10 @@
  *   stemcell health <body>
  *   stemcell genome [dir]                                          what the genome on disk contains
  *   stemcell prove <body> [<body> ...] --turns proofs/turns.json [--out proofs/<file>.json]
- *   stemcell studio build  --name "..." --schema rapp_X [--genome dir] [--self-grow] [--friend https://public.friend/] [--work-dir .stemcell/rapp_X]
+ *   stemcell studio build  --name "..." --schema rapp_X [--genome dir] [--self-grow [--flow-generation N]] [--friend https://public.friend/] [--work-dir .stemcell/rapp_X]
  *   stemcell studio deploy --name "..." --schema rapp_X --environment https://org.crm.dynamics.com/ [--publisher-prefix rapp] [--self-grow] [--friend url] [--token-command "..."]
+ *   stemcell solution build  --workspace .stemcell/rapp_X/workspace [--out solutions/X.zip] [--solution-name N] [--version 1.0]     solution zip, pac only
+ *   stemcell solution deploy --workspace ... --environment <url> [--settings-file f]      pack, import, publish with pac (no az, no Web API)
  *   stemcell harvest --schema rapp_X --environment <url> [--genome dir] [--dry-run]     skills the Studio body grew on its own → <genome>/agents/<name>/SKILL.md
  *   stemcell grow --friend http://localhost:7071 [--friend-public https://...] --name "..." --schema rapp_X --environment <url> [--learn "what the new agent should do"] [--watch --every 30] [--genome dir]
  *
@@ -27,6 +29,7 @@ import { readGenome, defaultGenomeDir } from '../src/genome.js';
 import { buildStudioWorkspace, deployStudio } from '../src/studio-workspace.js';
 import { growOnce, growWatch } from '../src/grow.js';
 import { harvest } from '../src/harvest.js';
+import { buildSolutionFolder, packSolution, importSolution } from '../src/solution.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -110,7 +113,7 @@ try {
       const genome = await readGenome(flags.genome || defaultGenomeDir());
       const workDir = flags['work-dir'] || join(process.cwd(), '.stemcell', flags.schema);
       mkdirSync(workDir, { recursive: true });
-      const built = await buildStudioWorkspace(genome, { name: flags.name, schemaName: flags.schema, model: flags.model, bridgeUrl: flags.bridge, bridgeRef: flags['bridge-ref'], bridgeName: flags['bridge-name'], friend: flags.friend ? { url: flags.friend } : undefined, selfGrow: flags['self-grow'] === 'true', workDir, purpose: flags.purpose });
+      const built = await buildStudioWorkspace(genome, { name: flags.name, schemaName: flags.schema, model: flags.model, bridgeUrl: flags.bridge, bridgeRef: flags['bridge-ref'], bridgeName: flags['bridge-name'], friend: flags.friend ? { url: flags.friend } : undefined, selfGrow: flags['self-grow'] === 'true', flowGeneration: flags['flow-generation'] ? Number(flags['flow-generation']) : undefined, workDir, purpose: flags.purpose });
       console.log(`built ${built.workspace}: ${built.components.length} components (${built.components.map((c) => c.kind + ':' + c.name).join(', ')})`);
       if (action === 'deploy') {
         if (!flags.environment) usage();
@@ -130,6 +133,23 @@ try {
         const r = await growOnce({ ...common, learn: flags.learn, force: flags.force === 'true' });
         console.log(JSON.stringify({ learned: r.learned, pulled: r.pulled, deployed: r.deployed && { ok: r.deployed.ok, botId: r.deployed.botId, preview: r.deployed.preview, log: r.deployed.log } }, null, 2));
         process.exitCode = r.deployed && !r.deployed.ok ? 1 : 0;
+      }
+      break;
+    }
+    case 'solution': {
+      const [action] = rest;
+      if (!['build', 'deploy'].includes(action) || !flags.workspace) usage();
+      const outDir = flags['out-dir'] || join(dirname(flags.workspace), 'solution');
+      const built = buildSolutionFolder(flags.workspace, { outDir, publisherPrefix: flags['publisher-prefix'], solutionName: flags['solution-name'], version: flags.version });
+      const zip = flags.out || join(dirname(outDir), `${built.solutionName}.zip`);
+      const packed = packSolution(built.folder, zip);
+      if (!packed.ok) { console.error(packed.out); process.exit(1); }
+      console.log(`packed ${zip}: bot ${built.schemaName}, ${built.components.length} components, ${built.workflows.length} flows, ${built.connectionReferences.length} connection references`);
+      if (action === 'deploy') {
+        if (!flags.environment) usage();
+        const r = importSolution(zip, flags.environment, built.schemaName, { settingsFile: flags['settings-file'], publish: flags.publish !== 'false', workflowIds: built.workflows.map((w) => w.id) });
+        console.log(JSON.stringify(r, null, 2));
+        process.exitCode = r.ok ? 0 : 1;
       }
       break;
     }

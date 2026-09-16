@@ -13,6 +13,7 @@ import { prove } from '../src/prove.js';
 import { buildStudioWorkspace } from '../src/studio-workspace.js';
 import { createHarnessBody } from '../src/bodies/harness.js';
 import { skillMarkdownFromComponentData } from '../src/harvest.js';
+import { buildSolutionFolder, readSettings } from '../src/solution.js';
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'genome');
 
@@ -211,6 +212,20 @@ test('self-growth: a Dataverse flow that writes a skill into the agent\'s own bo
   const built = await buildStudioWorkspace(g, { name: 'Fixture Twin', schemaName: 'rapp_FixtureTwin', workDir, selfGrow: true });
   const grow = built.components.find((c) => c.name === 'Grow a new skill');
   assert.ok(grow, 'the grow tool is a component');
+  assert.deepEqual(built.components.filter((c) => c.kind === 'WorkflowTool').map((c) => c.name).sort(), ['Fetch a URL', 'Grow a new skill', 'Grow a new tool']);
+  const toolDir = readdirSync(join(built.workspace, 'workflows')).find((d) => d.startsWith('RAPPGrowAgentTool'));
+  const tw = JSON.parse(readFileSync(join(built.workspace, 'workflows', toolDir, 'workflow.json'), 'utf8')).properties.definition.actions;
+  assert.equal(tw.Definition.inputs, "@json(triggerBody()?['definition'])");
+  assert.ok(tw.If_shape.actions.Respond_shape && tw.If_shape.actions.Stop.type === 'Terminate', 'a bad shape answers the agent and stops');
+  assert.equal(tw.If_new.actions.Create_flow.inputs.parameters.entityName, 'workflows');
+  assert.equal(tw.If_new.actions.Create_flow.inputs.parameters['item/category'], 5);
+  assert.deepEqual(tw.If_new.actions.Activate_flow.inputs.parameters, { entityName: 'workflows', recordId: "@body('Create_flow')?['workflowid']", 'item/statecode': 1, 'item/statuscode': 2 });
+  assert.equal(tw.If_new.actions.Link_tool.inputs.parameters.associationEntityRelationship, 'botcomponent_workflow');
+  assert.equal(tw.If_new.actions.Publish.inputs.parameters.actionName, 'Microsoft.Dynamics.CRM.PvaPublish');
+  const fetchDir = readdirSync(join(built.workspace, 'workflows')).find((d) => d.startsWith('RAPPFetchUrl'));
+  const fw = JSON.parse(readFileSync(join(built.workspace, 'workflows', fetchDir, 'workflow.json'), 'utf8'));
+  assert.deepEqual(fw.properties.connectionReferences, {}, 'fetch is connectionless');
+  assert.equal(fw.properties.definition.actions.Fetch.inputs.method, 'GET');
   const wfDir = readdirSync(join(built.workspace, 'workflows')).find((d) => d.startsWith('RAPPGrowSkill'));
   const wf = JSON.parse(readFileSync(join(built.workspace, 'workflows', wfDir, 'workflow.json'), 'utf8'));
   const a = wf.properties.definition.actions;
@@ -232,4 +247,27 @@ test('harvest turns an InlineAgentSkill row back into SKILL.md text', () => {
   const data = 'kind: InlineAgentSkill\ncontent: |\n  ---\n  name: iso-week-number\n  description: "x"\n  ---\n  # iso-week-number\n\n  1. step one\n     indented\n';
   assert.equal(skillMarkdownFromComponentData(data), '---\nname: iso-week-number\ndescription: "x"\n---\n# iso-week-number\n\n1. step one\n   indented\n');
   assert.equal(skillMarkdownFromComponentData('kind: WorkflowTool\nworkflowId: x\n'), null);
+});
+
+test('a workspace projects onto an importable solution folder (pac-only path)', async () => {
+  const g = await readGenome(FIXTURE);
+  const workDir = mkdtempSync(join(tmpdir(), 'stemcell-'));
+  const built = await buildStudioWorkspace(g, { name: 'Fixture Twin', schemaName: 'rapp_FixtureTwin', workDir, selfGrow: true });
+  const settings = readSettings(built.workspace);
+  assert.equal(settings.schemaName, 'rapp_FixtureTwin');
+  assert.match(settings.instructions, /^You are Fixture Twin\./);
+  assert.match(settings.instructions, /You can grow/);
+  const sol = buildSolutionFolder(built.workspace, { outDir: join(workDir, 'solution') });
+  assert.equal(sol.solutionName, 'rappFixtureTwinHarness');
+  assert.equal(sol.workflows.length, 3);
+  assert.equal(sol.links.length, 3, 'every WorkflowTool is linked to its flow');
+  assert.deepEqual(sol.connectionReferences.map((r) => r.logical), ['rapp_FixtureTwin.cr.shared_commondataserviceforapps']);
+  const cfg = JSON.parse(readFileSync(join(sol.folder, 'bots', 'rapp_FixtureTwin', 'configuration.json'), 'utf8'));
+  assert.equal(cfg.agentSettings.instructions.segments[0].value, settings.instructions);
+  assert.match(readFileSync(join(sol.folder, 'botcomponents', 'rapp_FixtureTwin.skill.hello-skill', 'data'), 'utf8'), /^kind: InlineAgentSkill\ncontent: \|/);
+  assert.match(readFileSync(join(sol.folder, 'botcomponents', 'rapp_FixtureTwin.tool.GrowTool', 'data'), 'utf8'), /^kind: WorkflowTool\nworkflowId: /);
+  const solXml = readFileSync(join(sol.folder, 'Other', 'Solution.xml'), 'utf8');
+  assert.equal((solXml.match(/<RootComponent type="29"/g) || []).length, 3);
+  assert.match(readFileSync(join(sol.folder, 'Assets', 'botcomponent_workflowset.xml'), 'utf8'), /rapp_FixtureTwin\.tool\.GrowSkill/);
+  assert.ok(existsSync(join(sol.folder, 'Workflows')) && readdirSync(join(sol.folder, 'Workflows')).some((f) => f.endsWith('.json.data.xml')));
 });

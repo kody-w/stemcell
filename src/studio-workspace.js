@@ -22,7 +22,7 @@ const kebab = (s) => (String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replac
 
 /**
  * @param {any} genome
- * @param {{ name: string, schemaName: string, model?: string, bridgeUrl?: string, bridgeRef?: string, bridgeName?: string, friend?: { url: string, name?: string }, selfGrow?: boolean, growConnectionReference?: string, workDir: string, purpose?: string }} cfg
+ * @param {{ name: string, schemaName: string, model?: string, bridgeUrl?: string, bridgeRef?: string, bridgeName?: string, friend?: { url: string, name?: string }, selfGrow?: boolean, growConnectionReference?: string, flowGeneration?: number, workDir: string, purpose?: string }} cfg
  */
 export async function buildStudioWorkspace(genome, cfg) {
   const ws = join(cfg.workDir, 'workspace');
@@ -33,7 +33,7 @@ export async function buildStudioWorkspace(genome, cfg) {
   let friendBuilt = null;
   let growBuilt = null;
   if (cfg.selfGrow) {
-    growBuilt = await buildSelfGrowth(cfg.schemaName, ws, { connectionReference: cfg.growConnectionReference });
+    growBuilt = await buildSelfGrowth(cfg.schemaName, ws, { connectionReference: cfg.growConnectionReference, generation: cfg.flowGeneration });
     routing.push(...selfGrowthInstructions(!!cfg.friend));
   }
   if (cfg.friend) {
@@ -96,7 +96,7 @@ export async function buildStudioWorkspace(genome, cfg) {
     components.push({ name, kind: 'InlineAgentSkill', file });
   };
   for (const s of genome.skills) behavior(kebab(s.name), s.description || s.name, readFileSync(s.file, 'utf8'));
-  if (growBuilt) components.push({ name: growBuilt.tool, kind: 'WorkflowTool', workflowId: growBuilt.id, connectionReference: growBuilt.connectionReference });
+  if (growBuilt) for (const t of growBuilt.tools) components.push({ name: t.tool, kind: 'WorkflowTool', workflowId: t.id, connectionReference: growBuilt.connectionReference });
   if (friendBuilt) {
     components.push({ name: friendBuilt.tool, kind: 'WorkflowTool', workflowId: friendBuilt.id, friend: friendBuilt.url });
     // One capability card per agent so growth is visible in the component list; execution is the friend's.

@@ -14,6 +14,7 @@ export { buildStudioWorkspace, deployStudio } from './src/studio-workspace.js';
 export { buildFriend, friendInstructions } from './src/friend.js';
 export { buildSelfGrowth, selfGrowthInstructions } from './src/grow-native.js';
 export { harvest, skillMarkdownFromComponentData } from './src/harvest.js';
+export { buildSolutionFolder, packSolution, importSolution, readSettings, readComponentYaml } from './src/solution.js';
 export { growOnce, growWatch } from './src/grow.js';
 export { createHttpBody } from './src/bodies/http.js';
 export { createSdkBody } from './src/bodies/sdk.js';
