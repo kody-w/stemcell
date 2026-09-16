@@ -33,7 +33,7 @@ const LOCAL_CLAIM = [
   [/localhost|127\.0\.0\.1|\/health\b|restart(ing)?\b|start\.sh|\bvenv\b|index\.html/i, 'a local server'],
   [/drag(ging)?\b|VS Code|Brain Surgeon|export the (Brainstem )?transcript|chat window|toolbar/i, 'a desktop app'],
   [/GitHub (account|token|Copilot)|device-?code|API keys?/i, 'local sign-in'],
-  [/agent\.py|hot-?load|quarantin|experimental directory|agent registry|file\/class\/method/i, 'the local agent loader'],
+  [/agent\.py|hot-?load|quarantin|experimental directory|file\/class\/method/i, 'the local agent loader'],   // not "agent registry": the public RAR catalog is an HTTP source, and the soul's local one is caught by "toolbar"
   [/\bpython3?\b|\bbash\b|\bshell\b|\bnpm\b|\bpip install|\bgit \b|scripts?\/|\.\/[a-z]/i, 'a shell']
 ];
 
