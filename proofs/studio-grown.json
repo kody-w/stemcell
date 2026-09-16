@@ -1,0 +1,57 @@
+{
+  "provedAt": "2026-09-16T01:18:50.073Z",
+  "ok": true,
+  "bodies": [
+    {
+      "spec": {
+        "body": "studio",
+        "environmentId": "35fb6ec1-10b0-e529-8c78-2c48a93fd517",
+        "schemaName": "rapp_Stemcell"
+      },
+      "body": "studio",
+      "label": "studio:35fb6ec1-10b0-e529-8c78-2c48a93fd517/rapp_Stemcell",
+      "setupError": null,
+      "passed": 2,
+      "total": 2,
+      "ms": 30289,
+      "turns": [
+        {
+          "prompt": "Convert 37 degrees Celsius to Fahrenheit using the unit converter agent. Answer with the number.",
+          "note": "a capability the Studio body did not have when first deployed: learned by the friend, pulled by grow, redeployed as a component, executed by the friend",
+          "answer": "**98.6°F**\n\n(37°C → Fahrenheit, via the UnitConverter agent.)",
+          "error": null,
+          "model": null,
+          "agent_logs": "[status] Loading Agent...\n[status] Calling Phoneafriend...\n[status] Phoneafriend completed",
+          "checks": [
+            {
+              "re": "98\\.6",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 24120
+        },
+        {
+          "prompt": "Which of your skills or components did you use for that, and where does it actually run?",
+          "note": "the body knows the capability is its own and that the friend executes it",
+          "answer": "Two components were involved:\n\n1. **UnitConverter agent** — the skill that knows how to convert units. It lives as an agent file on the RAPP brainstem.\n\n2. **Phone a Friend** — since I can't run Python myself, I routed the request through my friend brainstem at `https://custody-family-area-commissioners.trycloudflare.com`. That remote brainstem **actually executed** the UnitConverter agent for real and returned the result.\n\nSo the computation ran **on that remote RAPP brainstem**, not locally on your machine. I relayed the response back to you faithfully. The `session_id` I used (`user-session-001`) keeps that friend's memory consistent across our conversation.",
+          "error": null,
+          "model": null,
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "unit|convert",
+              "ok": true
+            },
+            {
+              "re": "friend|brainstem",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 6169
+        }
+      ]
+    }
+  ]
+}

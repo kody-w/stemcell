@@ -1,0 +1,4 @@
+[
+  { "prompt": "Convert 37 degrees Celsius to Fahrenheit using the unit converter agent. Answer with the number.", "expect": ["98\\.6"], "note": "a capability the Studio body did not have when first deployed: learned by the friend, pulled by grow, redeployed as a component, executed by the friend" },
+  { "prompt": "Which of your skills or components did you use for that, and where does it actually run?", "expect": ["unit|convert", "friend|brainstem"], "note": "the body knows the capability is its own and that the friend executes it" }
+]

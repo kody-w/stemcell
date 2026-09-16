@@ -25,8 +25,8 @@ Built on [copilot-harness-sdk](https://github.com/kody-w/copilot-harness-sdk): i
 | --- | --- | --- | --- |
 | `http://host:port` | `http` | a brainstem already running (the grail on :7071, the lab on :7081, a Tier 2 Azure Function, a LAN twin); the request and the frames pass through untouched | 4/4 proof turns on two live brainstems |
 | `sdk` / `sdk:<genome dir>` | `sdk` | the Copilot SDK inside this process: `soul.md` is the system message (runtime mode `empty`, so none of your own Copilot CLI config leaks in), every `agent.py` is a custom tool whose `perform()` runs in python with the grail's import shims, skill folders load natively | 4/4 proof turns, agents executed, memory written and recalled |
-| `headless:<host:port>[:<genome>]` | `headless` | the same, against a `copilot --headless --port N` runtime shared by many users | see below |
-| `studio:<environmentId>/<schemaName>` | `studio` | a Copilot Studio GitHub Copilot harness agent over the Agentic Runtime `/3p` route with a delegated Entra token (public-client app holding `CopilotStudio.Copilots.Invoke`; MSAL cache file so only the first run signs in) | live turn through a deployed agent, skill invoked |
+| `headless:<host:port>[:<genome>]` | `headless` | the same, against a `copilot --headless --port N` runtime shared by many users | persona turn and an agent execution against `copilot --headless --port 4399` |
+| `studio:<environmentId>/<schemaName>` | `studio` | a Copilot Studio GitHub Copilot harness agent over the Agentic Runtime `/3p` route with a delegated Entra token (public-client app holding `CopilotStudio.Copilots.Invoke`; MSAL cache file so only the first run signs in) | 4/4 proof turns on `rapp_Stemcell` deployed from the grail genome; Hacker News and memory ran on the friend (friend log shows the calls) |
 | `directline:<environmentId>/<schemaName>` | `directline` | the same agent over no-auth agentic Direct Line (final-only answers; agent published with No Authentication) | not run in this session |
 
 ```bash
@@ -80,6 +80,8 @@ The instructions tell the agent: route every agent request through the friend, a
 stemcell grow --friend http://localhost:7071 --friend-public https://<random>.trycloudflare.com \
   --name "RAPP Stemcell" --schema rapp_Stemcell --environment https://<org>.crm.dynamics.com/ --watch --every 30
 ```
+
+Proof (16 Sep 2026, one environment, `rapp_Stemcell`, 10 components at first deploy): the Studio body was asked to convert 100 °C with "a dedicated unit-conversion agent you do not have yet". It phoned the friend twice (`LearnNew` wrote `unit_converter_agent.py` on the grail; the second call answered 212 °F). `stemcell grow` re-projected and redeployed: 11 components, `skill.unitconverter` present, flow updated in place; the grown body then answered 37 °C → 98.6 °F through the new agent (`proofs/studio-grown.json`). With `grow --watch` running, a second ask ("an agent that counts days until a date") produced `days_until_agent.py` on the friend; the watcher pulled it and redeployed on its own: 12 components, `skill.daysuntil` present. Nobody opened the portal. The quality of a learned agent is `LearnNew`'s business: the Studio body reported that the days-until agent echoed on its first run and handed the user the fix path.
 
 `grow --watch` polls the friend's `/agents`. When a new agent appears there (because the Studio body asked the friend to learn it, or because anyone taught the friend directly), it pulls the file through `/agents/export/<file>` into the genome, re-projects, and redeploys the Studio agent through the same harness-only script (update in place; stale components removed). The capability the Studio body could not perform becomes one of its own components without anyone opening the portal. `grow --learn "converts Celsius to Fahrenheit"` runs one cycle and asks the friend to learn first; `--dry-run` skips the deploy.
 
