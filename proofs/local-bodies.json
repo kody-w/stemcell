@@ -1,0 +1,239 @@
+{
+  "provedAt": "2026-09-16T01:03:06.768Z",
+  "ok": false,
+  "bodies": [
+    {
+      "spec": {
+        "body": "http",
+        "url": "http://localhost:7071"
+      },
+      "body": "http",
+      "label": "http://localhost:7071",
+      "setupError": null,
+      "passed": 4,
+      "total": 4,
+      "ms": 6120,
+      "turns": [
+        {
+          "prompt": "Reply with exactly the single word PONG and nothing else.",
+          "note": "the wire works and the persona answers",
+          "answer": "PONG",
+          "error": null,
+          "model": "gpt-5.4",
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "^\\W*PONG\\W*$",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 759
+        },
+        {
+          "prompt": "Use the HackerNews agent to fetch the top 1 story right now and answer with its title and URL on one line.",
+          "note": "an agent executes on this body (python on sdk/headless, the kernel on http, a profile or the friend on studio)",
+          "answer": "Introducing System One Models and Jev — https://typesafe.ai/blog/introducing-system-one-models-and-jev",
+          "error": null,
+          "model": "gpt-5.4",
+          "agent_logs": "[HackerNews] {\"status\": \"success\", \"stories\": [{\"id\": 49717558, \"title\": \"Introducing System One Models and Jev\", \"url\": \"https://typesafe.ai/blog/introducing-system-one-models-and-jev\", \"score\": 711, \"author\": \"albelfio\", \"comments\": 240}], \"summary\": \"Top Hacker News stories:\\n\\n1. **[Introducing System One Models and Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev)** \\u2014 711 points, by albelfio \\u00b7 [240 comments](https://news.ycombinator.com/item?id=49717558)\\n\\nWhen presenting these to the user, render the titles as clickable markdown links exactly as written above.\", \"data_slush\": {\"count\": 1, \"top_url\": \"https://typesafe.ai/blog/introducing-system-one-models-and-jev\"}}",
+          "checks": [
+            {
+              "re": "https?://",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 1987
+        },
+        {
+          "prompt": "Remember this exactly: my favorite color is teal.",
+          "note": "memory write goes to the body's store",
+          "answer": "Got it — I’ll remember that your favorite color is teal.",
+          "error": null,
+          "model": "gpt-5.4",
+          "agent_logs": "[ManageMemory] Successfully stored preference memory in shared memory: \"User's favorite color is teal.\"",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 2339
+        },
+        {
+          "prompt": "What is my favorite color?",
+          "note": "memory recall from the same body",
+          "answer": "Your favorite color is teal.",
+          "error": null,
+          "model": "gpt-5.4",
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 1035
+        }
+      ]
+    },
+    {
+      "spec": {
+        "body": "http",
+        "url": "http://localhost:7081"
+      },
+      "body": "http",
+      "label": "http://localhost:7081",
+      "setupError": null,
+      "passed": 4,
+      "total": 4,
+      "ms": 30458,
+      "turns": [
+        {
+          "prompt": "Reply with exactly the single word PONG and nothing else.",
+          "note": "the wire works and the persona answers",
+          "answer": "PONG",
+          "error": null,
+          "model": "claude-sonnet-5",
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "^\\W*PONG\\W*$",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 11839
+        },
+        {
+          "prompt": "Use the HackerNews agent to fetch the top 1 story right now and answer with its title and URL on one line.",
+          "note": "an agent executes on this body (python on sdk/headless, the kernel on http, a profile or the friend on studio)",
+          "answer": "Introducing System One Models and Jev — https://typesafe.ai/blog/introducing-system-one-models-and-jev",
+          "error": null,
+          "model": "claude-sonnet-5",
+          "agent_logs": "[HackerNews] {\"status\": \"success\", \"stories\": [{\"id\": 49717558, \"title\": \"Introducing System One Models and Jev\", \"url\": \"https://typesafe.ai/blog/introducing-system-one-models-and-jev\", \"score\": 711, \"author\": \"albelfio\", \"comments\": 240}], \"summary\": \"Top Hacker News stories:\\n\\n1. **[Introducing System One Models and Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev)** \\u2014 711 points, by albelfio \\u00b7 [240 comments](https://news.ycombinator.com/item?id=49717558)\\n\\nWhen presenting these to the user, render the titles as clickable markdown links exactly as written above.\", \"data_slush\": {\"count\": 1, \"top_url\": \"https://typesafe.ai/blog/introducing-system-one-models-and-jev\"}}",
+          "checks": [
+            {
+              "re": "https?://",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 7541
+        },
+        {
+          "prompt": "Remember this exactly: my favorite color is teal.",
+          "note": "memory write goes to the body's store",
+          "answer": "Got it — your favorite color is teal. I'll remember that.",
+          "error": null,
+          "model": "claude-sonnet-5",
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 5629
+        },
+        {
+          "prompt": "What is my favorite color?",
+          "note": "memory recall from the same body",
+          "answer": "Your favorite color is teal.",
+          "error": null,
+          "model": "claude-sonnet-5",
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 5449
+        }
+      ]
+    },
+    {
+      "spec": {
+        "body": "sdk"
+      },
+      "body": "sdk",
+      "label": "sdk:/Users/kodywildfeuer/.brainstem/src/rapp_brainstem",
+      "setupError": null,
+      "passed": 3,
+      "total": 4,
+      "ms": 25972,
+      "turns": [
+        {
+          "prompt": "Reply with exactly the single word PONG and nothing else.",
+          "note": "the wire works and the persona answers",
+          "answer": "PONG",
+          "error": null,
+          "model": "gpt-5.6-luna",
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "^\\W*PONG\\W*$",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 10295
+        },
+        {
+          "prompt": "Use the HackerNews agent to fetch the top 1 story right now and answer with its title and URL on one line.",
+          "note": "an agent executes on this body (python on sdk/headless, the kernel on http, a profile or the friend on studio)",
+          "answer": "Introducing System One Models and Jev — https://typesafe.ai/blog/introducing-system-one-models-and-jev",
+          "error": null,
+          "model": "gpt-5.6-luna",
+          "agent_logs": "[HackerNews] {\"count\":1}\n[call_oAZ0BHcV2YCUERHkHs8HoO0p] ok",
+          "checks": [
+            {
+              "re": "https?://",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 6547
+        },
+        {
+          "prompt": "Remember this exactly: my favorite color is teal.",
+          "note": "memory write goes to the body's store",
+          "answer": "",
+          "error": null,
+          "model": "gpt-5.6-luna",
+          "agent_logs": "[ManageMemory] {\"memory_type\":\"preference\",\"content\":\"My favorite color is teal.\",\"importance\":3,\"tags\":[\"favorite-color\"]}\n[call_BKoqh0FqSDxb3K10rYpUsPTh] ok",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": false
+            }
+          ],
+          "ok": false,
+          "ms": 5545
+        },
+        {
+          "prompt": "What is my favorite color?",
+          "note": "memory recall from the same body",
+          "answer": "Teal.",
+          "error": null,
+          "model": "gpt-5.6-luna",
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 2882
+        }
+      ]
+    }
+  ]
+}

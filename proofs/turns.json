@@ -1,0 +1,6 @@
+[
+  { "prompt": "Reply with exactly the single word PONG and nothing else.", "expect": ["^\\W*PONG\\W*$"], "note": "the wire works and the persona answers" },
+  { "prompt": "Use the HackerNews agent to fetch the top 1 story right now and answer with its title and URL on one line.", "expect": ["https?://"], "note": "an agent executes on this body (python on sdk/headless, the kernel on http, a profile or the friend on studio)" },
+  { "prompt": "Remember this exactly: my favorite color is teal.", "expect": ["teal"], "note": "memory write goes to the body's store", "user_guid": "stemcell-proof" },
+  { "prompt": "What is my favorite color?", "expect": ["teal"], "note": "memory recall from the same body", "user_guid": "stemcell-proof" }
+]

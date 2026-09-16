@@ -1,0 +1,36 @@
+{
+  "name": "stemcell",
+  "version": "0.1.0",
+  "description": "The RAPP brainstem, wherever you need it: one wire over every body it can take (a running brainstem, the Copilot SDK in your process, a headless runtime, a Copilot Studio agent).",
+  "type": "module",
+  "license": "MIT",
+  "repository": "github:kody-w/stemcell",
+  "homepage": "https://github.com/kody-w/stemcell",
+  "bin": {
+    "stemcell": "./bin/stemcell.js"
+  },
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "bin/",
+    "src/",
+    "python/",
+    "ui/",
+    "proofs/turns.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check index.js && node --check bin/stemcell.js && for f in src/*.js src/bodies/*.js; do node --check $f || exit 1; done && python3 -m py_compile python/agent_runner.py"
+  },
+  "engines": {
+    "node": "^20.19 || >=22.12"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "^1.0.13",
+    "copilot-harness-sdk": "github:kody-w/copilot-harness-sdk"
+  }
+}

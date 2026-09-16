@@ -1,0 +1,7 @@
+node_modules/
+.stemcell/
+.deploy/
+proofs/*.local.json
+*.log
+.env
+.DS_Store
