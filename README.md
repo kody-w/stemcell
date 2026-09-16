@@ -98,6 +98,16 @@ Proof (16 Sep 2026, `rapp_Stemcell`): asked for a Roman-numeral conversion "with
 
 Two things to know: a republish takes about a minute to reach new conversations, so a second conversation started immediately may grow a same-purpose skill under another name (the flow refuses exact duplicates; semantic duplicates are the model's judgment). And every stemcell deploy passes `--keep-extra-components`, so grown skills survive re-projection.
 
+## Load the learning brainstem into any environment
+
+`solutions/RAPPLearningBrainstem_unmanaged.zip` is the exported, friendless learning brainstem: the `rapp_Stemcell` harness agent (`cliagent-1.0.0`), its instructions with the self-growth rule, the **Grow a new skill** tool, the `RAPP Grow Skill Workflow` agent flow, the Dataverse connection reference `rapp_Stemcell.cr.shared_commondataserviceforapps`, the genome's capability cards, and two skills the agent grew on its own (`iso-week-number`, `leap-year-checker`).
+
+1. Import it: maker portal → Solutions → Import, or `pac solution import --environment https://<org>.crm.dynamics.com/ --path solutions/RAPPLearningBrainstem_unmanaged.zip --publish-changes`.
+2. Bind the connection reference to a Dataverse connection of the importing user (the portal's import wizard asks; with pac, pass `--settings-file` mapping `rapp_Stemcell.cr.shared_commondataserviceforapps` to a connection id from `pac connection list`). That connection is what lets the agent write its own skills and republish itself.
+3. Open the agent in Copilot Studio, Preview it, and ask for something it cannot do yet but can work out itself (a conversion, a date calculation, a checklist). Watch the component list grow.
+
+Verified 16 Sep 2026: imported into a second environment with none of this in it; the bot, all 14 components, the activated flow and the connection reference landed; the reference was unbound because that environment had no Dataverse connection yet (step 2).
+
 ## Proofs
 
 `proofs/turns.json` is the parity script: the same four turns (persona, agent execution, memory write, memory recall) on every body, regex asserts on every answer, one JSON record per run (`proofs/*.json`). A body is "there" when it passes the same turns as the grail.
