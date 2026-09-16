@@ -85,6 +85,19 @@ Proof (16 Sep 2026, one environment, `rapp_Stemcell`, 10 components at first dep
 
 `grow --watch` polls the friend's `/agents`. When a new agent appears there (because the Studio body asked the friend to learn it, or because anyone taught the friend directly), it pulls the file through `/agents/export/<file>` into the genome, re-projects, and redeploys the Studio agent through the same harness-only script (update in place; stale components removed). The capability the Studio body could not perform becomes one of its own components without anyone opening the portal. `grow --learn "converts Celsius to Fahrenheit"` runs one cycle and asks the friend to learn first; `--dry-run` skips the deploy.
 
+## Self-growth: the Studio body grows without a friend
+
+Copilot Studio cannot write agents, but a harness agent can author a skill and, through Dataverse, write it into its own bot record. `--self-grow` gives the agent **Grow a new skill**: a `WorkflowTool` on an agent flow that uses the environment's existing Dataverse connection (List bots → Create `botcomponents` row, `InlineAgentSkill`, componenttype 9 → `PvaPublish`, the same bound action `pac copilot publish` calls) with a duplicate-name guard. The instructions say: when the user needs a capability none of your skills cover and you can carry it out yourself (reasoning, or a script in your sandbox), author the skill, grow it, follow it now. No friend, no function, no pac, no machine outside the tenant.
+
+```bash
+stemcell studio deploy --name "RAPP Stemcell" --schema rapp_Stemcell --environment https://<org>.crm.dynamics.com/ --self-grow [--friend <url>]
+stemcell harvest --schema rapp_Stemcell --environment https://<org>.crm.dynamics.com/      # grown skills → <genome>/agents/<name>/SKILL.md
+```
+
+Proof (16 Sep 2026, `rapp_Stemcell`): asked for a Roman-numeral conversion "with a skill you don't have yet", the agent authored `roman-numerals` and the flow created the row (publish then failed on the action name; fixed to `Microsoft.Dynamics.CRM.PvaPublish`). Asked for an ISO week number: `skill.iso-week-number` appeared in the bot record 4 s later, `publishedon` moved 40 s after that, and the answer (2027-01-01 is 2026-W53) was right. Asked whether 2100 is a leap year: `leap-year-checker` grown and followed in the same turn; a fresh conversation a minute later loaded it natively (`Loading skill: leap-year-checker`) and answered 1900 correctly. `stemcell harvest` then wrote `iso-week-number/SKILL.md` into the grail genome, and the in-process `sdk` body listed and used it. One genome; the body taught it.
+
+Two things to know: a republish takes about a minute to reach new conversations, so a second conversation started immediately may grow a same-purpose skill under another name (the flow refuses exact duplicates; semantic duplicates are the model's judgment). And every stemcell deploy passes `--keep-extra-components`, so grown skills survive re-projection.
+
 ## Proofs
 
 `proofs/turns.json` is the parity script: the same four turns (persona, agent execution, memory write, memory recall) on every body, regex asserts on every answer, one JSON record per run (`proofs/*.json`). A body is "there" when it passes the same turns as the grail.
@@ -92,11 +105,11 @@ Proof (16 Sep 2026, one environment, `rapp_Stemcell`, 10 components at first dep
 ## Tests
 
 ```bash
-npm test      # 9 offline tests: spec parsing, genome + python contracts, agent execution with shims, http body, serve, prove, SDK-event mapping, Studio projection with bridge and with friend
+npm test      # 11 offline tests: spec parsing, genome + python contracts, agent execution with shims, http body, serve, prove, SDK-event mapping, Studio projection with bridge, friend and self-growth, harvest
 ```
 
 ## What this is not
 
-Not the grail: `kody-w/rapp-installer` is untouched; stemcell reads its installed genome. Not a new kernel: the `sdk` body is the Copilot SDK with the genome on top. Not a portal: every Studio change goes through copilot-harness-sdk's deploy script, which refuses anything that is not the GitHub Copilot harness.
+Not the grail: `kody-w/rapp-installer` is untouched; stemcell reads its installed genome. Not a new kernel: the `sdk` body is the Copilot SDK with the genome on top. Not a portal: every deploy goes through copilot-harness-sdk's deploy script, which refuses anything that is not the GitHub Copilot harness; self-growth goes through the agent's own flow and Dataverse.
 
 MIT.

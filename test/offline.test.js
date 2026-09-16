@@ -12,6 +12,7 @@ import { serve } from '../src/serve.js';
 import { prove } from '../src/prove.js';
 import { buildStudioWorkspace } from '../src/studio-workspace.js';
 import { createHarnessBody } from '../src/bodies/harness.js';
+import { skillMarkdownFromComponentData } from '../src/harvest.js';
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'genome');
 
@@ -202,4 +203,33 @@ test('with a friend, agents route through a connectionless Phone-a-friend flow a
   assert.match(readFileSync(join(built.workspace, 'settings.mcs.yml'), 'utf8'), /Use LearnNew to create a new agent/);
   assert.match(readFileSync(join(built.workspace, 'behaviors', 'echo.mcs.yml'), 'utf8'), /Phone a friend[\s\S]*runs the Echo agent for real/);
   assert.ok(!/class EchoAgent/.test(readFileSync(join(built.workspace, 'behaviors', 'echo.mcs.yml'), 'utf8')), 'no code is ported when a friend executes');
+});
+
+test('self-growth: a Dataverse flow that writes a skill into the agent\'s own bot record and republishes it', async () => {
+  const g = await readGenome(FIXTURE);
+  const workDir = mkdtempSync(join(tmpdir(), 'stemcell-'));
+  const built = await buildStudioWorkspace(g, { name: 'Fixture Twin', schemaName: 'rapp_FixtureTwin', workDir, selfGrow: true });
+  const grow = built.components.find((c) => c.name === 'Grow a new skill');
+  assert.ok(grow, 'the grow tool is a component');
+  const wfDir = readdirSync(join(built.workspace, 'workflows')).find((d) => d.startsWith('RAPPGrowSkill'));
+  const wf = JSON.parse(readFileSync(join(built.workspace, 'workflows', wfDir, 'workflow.json'), 'utf8'));
+  const a = wf.properties.definition.actions;
+  assert.equal(a.List_bots.inputs.parameters.$filter, "schemaname eq 'rapp_FixtureTwin'");
+  assert.match(a.Existing.inputs.parameters.$filter, /schemaname eq 'rapp_FixtureTwin\.skill\./, 'no duplicate skills');
+  const inner = a.If_new.actions;
+  assert.equal(inner.Create_skill.inputs.parameters.entityName, 'botcomponents');
+  assert.equal(inner.Create_skill.inputs.parameters['item/componenttype'], 9);
+  assert.match(inner.Create_skill.inputs.parameters['item/schemaname'], /rapp_FixtureTwin\.skill\./);
+  assert.equal(inner.Publish.inputs.parameters.actionName, 'Microsoft.Dynamics.CRM.PvaPublish');
+  assert.equal(inner.Publish.inputs.host.operationId, 'PerformBoundAction');
+  assert.equal(wf.properties.connectionReferences.shared_commondataserviceforapps.connection.connectionReferenceLogicalName, 'rapp_FixtureTwin.cr.shared_commondataserviceforapps');
+  assert.ok(existsSync(join(built.workspace, 'infrastructure', 'connections', 'rapp_FixtureTwin.cr.shared_commondataserviceforapps.sync.yaml')));
+  assert.match(readFileSync(join(built.workspace, 'settings.mcs.yml'), 'utf8'), /You can grow/);
+  assert.match(readFileSync(join(built.workspace, 'capabilities', 'tools', 'GrowSkill.mcs.yml'), 'utf8'), /kind: WorkflowTool[\s\S]*name: instructions/);
+});
+
+test('harvest turns an InlineAgentSkill row back into SKILL.md text', () => {
+  const data = 'kind: InlineAgentSkill\ncontent: |\n  ---\n  name: iso-week-number\n  description: "x"\n  ---\n  # iso-week-number\n\n  1. step one\n     indented\n';
+  assert.equal(skillMarkdownFromComponentData(data), '---\nname: iso-week-number\ndescription: "x"\n---\n# iso-week-number\n\n1. step one\n   indented\n');
+  assert.equal(skillMarkdownFromComponentData('kind: WorkflowTool\nworkflowId: x\n'), null);
 });

@@ -14,6 +14,7 @@ import { join, basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { buildFriend, friendInstructions } from './friend.js';
+import { buildSelfGrowth, selfGrowthInstructions } from './grow-native.js';
 
 const yamlStr = (s) => JSON.stringify(String(s));
 const indent = (text, n) => String(text).split('\n').map((l) => (l ? ' '.repeat(n) + l : '')).join('\n');
@@ -21,7 +22,7 @@ const kebab = (s) => (String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replac
 
 /**
  * @param {any} genome
- * @param {{ name: string, schemaName: string, model?: string, bridgeUrl?: string, bridgeRef?: string, bridgeName?: string, friend?: { url: string, name?: string }, workDir: string, purpose?: string }} cfg
+ * @param {{ name: string, schemaName: string, model?: string, bridgeUrl?: string, bridgeRef?: string, bridgeName?: string, friend?: { url: string, name?: string }, selfGrow?: boolean, growConnectionReference?: string, workDir: string, purpose?: string }} cfg
  */
 export async function buildStudioWorkspace(genome, cfg) {
   const ws = join(cfg.workDir, 'workspace');
@@ -30,6 +31,11 @@ export async function buildStudioWorkspace(genome, cfg) {
   const routing = [];
   for (const s of genome.skills) routing.push(`- ${s.description.replace(/\s+/g, ' ').slice(0, 300) || s.name}: use the ${kebab(s.name)} skill and follow it exactly.`);
   let friendBuilt = null;
+  let growBuilt = null;
+  if (cfg.selfGrow) {
+    growBuilt = await buildSelfGrowth(cfg.schemaName, ws, { connectionReference: cfg.growConnectionReference });
+    routing.push(...selfGrowthInstructions(!!cfg.friend));
+  }
   if (cfg.friend) {
     friendBuilt = await buildFriend(cfg.friend, cfg.schemaName, ws);
     routing.push(...friendInstructions(cfg.friend, genome.agents));
@@ -90,6 +96,7 @@ export async function buildStudioWorkspace(genome, cfg) {
     components.push({ name, kind: 'InlineAgentSkill', file });
   };
   for (const s of genome.skills) behavior(kebab(s.name), s.description || s.name, readFileSync(s.file, 'utf8'));
+  if (growBuilt) components.push({ name: growBuilt.tool, kind: 'WorkflowTool', workflowId: growBuilt.id, connectionReference: growBuilt.connectionReference });
   if (friendBuilt) {
     components.push({ name: friendBuilt.tool, kind: 'WorkflowTool', workflowId: friendBuilt.id, friend: friendBuilt.url });
     // One capability card per agent so growth is visible in the component list; execution is the friend's.
@@ -128,7 +135,7 @@ export async function buildStudioWorkspace(genome, cfg) {
   }
   writeFileSync(join(cfg.workDir, 'BUILD.json'), JSON.stringify({
     name: cfg.name, schema: cfg.schemaName, builtAt: new Date().toISOString(), genome: genome.dir, model: cfg.model || 'Sonnet46',
-    bridge: cfg.bridgeUrl || null, friend: friendBuilt ? friendBuilt.url : null, skills: genome.skills.map((s) => s.name), agents: genome.agents.map((a) => a.name), components
+    bridge: cfg.bridgeUrl || null, friend: friendBuilt ? friendBuilt.url : null, selfGrow: !!growBuilt, skills: genome.skills.map((s) => s.name), agents: genome.agents.map((a) => a.name), components
   }, null, 2));
   return { workspace: ws, components, instructions };
 }
@@ -147,6 +154,7 @@ export function deployStudio(cfg) {
   const { cmd, args } = deployCommand();
   const full = [...args, '--name', cfg.name, '--publisher-prefix', cfg.publisherPrefix, '--schema-name', cfg.schemaName,
     '--workspace-dir', cfg.workspace, '--environment', cfg.environment, '--work-dir', join(cfg.workDir, 'deploy'),
+    '--keep-extra-components',   // never delete what the body grew on its own
     ...(cfg.model ? ['--model', cfg.model] : []), ...(cfg.tokenCommand ? ['--token-command', cfg.tokenCommand] : [])];
   const log = cfg.log || ((l) => process.stderr.write(l));
   return new Promise((resolve) => {

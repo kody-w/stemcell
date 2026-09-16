@@ -9,8 +9,9 @@
  *   stemcell health <body>
  *   stemcell genome [dir]                                          what the genome on disk contains
  *   stemcell prove <body> [<body> ...] --turns proofs/turns.json [--out proofs/<file>.json]
- *   stemcell studio build  --name "..." --schema rapp_X [--genome dir] [--friend https://public.friend/] [--work-dir .stemcell/rapp_X]
- *   stemcell studio deploy --name "..." --schema rapp_X --environment https://org.crm.dynamics.com/ [--publisher-prefix rapp] [--friend url] [--token-command "..."]
+ *   stemcell studio build  --name "..." --schema rapp_X [--genome dir] [--self-grow] [--friend https://public.friend/] [--work-dir .stemcell/rapp_X]
+ *   stemcell studio deploy --name "..." --schema rapp_X --environment https://org.crm.dynamics.com/ [--publisher-prefix rapp] [--self-grow] [--friend url] [--token-command "..."]
+ *   stemcell harvest --schema rapp_X --environment <url> [--genome dir] [--dry-run]     skills the Studio body grew on its own → <genome>/agents/<name>/SKILL.md
  *   stemcell grow --friend http://localhost:7071 [--friend-public https://...] --name "..." --schema rapp_X --environment <url> [--learn "what the new agent should do"] [--watch --every 30] [--genome dir]
  *
  * Bodies: http://host:port | sdk | sdk:<genome> | headless:<host:port>[:<genome>] | studio:<envId>/<schema> | directline:<envId>/<schema>
@@ -25,6 +26,7 @@ import { prove, summarize } from '../src/prove.js';
 import { readGenome, defaultGenomeDir } from '../src/genome.js';
 import { buildStudioWorkspace, deployStudio } from '../src/studio-workspace.js';
 import { growOnce, growWatch } from '../src/grow.js';
+import { harvest } from '../src/harvest.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -36,7 +38,7 @@ for (let i = 0; i < argv.length; i++) {
     const eq = a.indexOf('=');
     if (eq > 0) { flags[a.slice(2, eq)] = a.slice(eq + 1); continue; }
     const next = argv[i + 1];
-    const boolean = ['json', 'stream', 'watch', 'once', 'dry-run', 'force'].includes(a.slice(2));
+    const boolean = ['json', 'stream', 'watch', 'once', 'dry-run', 'force', 'self-grow'].includes(a.slice(2));
     if (!boolean && next !== undefined && !next.startsWith('--')) { flags[a.slice(2)] = next; i++; } else flags[a.slice(2)] = 'true';
   } else positional.push(a);
 }
@@ -108,7 +110,7 @@ try {
       const genome = await readGenome(flags.genome || defaultGenomeDir());
       const workDir = flags['work-dir'] || join(process.cwd(), '.stemcell', flags.schema);
       mkdirSync(workDir, { recursive: true });
-      const built = await buildStudioWorkspace(genome, { name: flags.name, schemaName: flags.schema, model: flags.model, bridgeUrl: flags.bridge, bridgeRef: flags['bridge-ref'], bridgeName: flags['bridge-name'], friend: flags.friend ? { url: flags.friend } : undefined, workDir, purpose: flags.purpose });
+      const built = await buildStudioWorkspace(genome, { name: flags.name, schemaName: flags.schema, model: flags.model, bridgeUrl: flags.bridge, bridgeRef: flags['bridge-ref'], bridgeName: flags['bridge-name'], friend: flags.friend ? { url: flags.friend } : undefined, selfGrow: flags['self-grow'] === 'true', workDir, purpose: flags.purpose });
       console.log(`built ${built.workspace}: ${built.components.length} components (${built.components.map((c) => c.kind + ':' + c.name).join(', ')})`);
       if (action === 'deploy') {
         if (!flags.environment) usage();
@@ -120,7 +122,7 @@ try {
     }
     case 'grow': {
       if (!flags.friend || !flags.name || !flags.schema || !flags.environment) usage();
-      const studio = { name: flags.name, schema: flags.schema, environment: flags.environment, publisherPrefix: flags['publisher-prefix'], model: flags.model, tokenCommand: flags['token-command'], purpose: flags.purpose };
+      const studio = { name: flags.name, schema: flags.schema, environment: flags.environment, publisherPrefix: flags['publisher-prefix'], model: flags.model, tokenCommand: flags['token-command'], purpose: flags.purpose, selfGrow: flags['self-grow'] === 'true' };
       const common = { friendUrl: flags.friend, friendPublicUrl: flags['friend-public'], genomeDir: flags.genome || defaultGenomeDir(), studio, workDir: flags['work-dir'], deploy: flags['dry-run'] !== 'true' };
       if (flags.watch === 'true') {
         await growWatch({ ...common, everyMs: Number(flags.every || 30) * 1000, onCycle: (r) => console.log(JSON.stringify({ learned: r.learned, pulled: r.pulled, deployed: r.deployed && { ok: r.deployed.ok, botId: r.deployed.botId } })) });
@@ -129,6 +131,12 @@ try {
         console.log(JSON.stringify({ learned: r.learned, pulled: r.pulled, deployed: r.deployed && { ok: r.deployed.ok, botId: r.deployed.botId, preview: r.deployed.preview, log: r.deployed.log } }, null, 2));
         process.exitCode = r.deployed && !r.deployed.ok ? 1 : 0;
       }
+      break;
+    }
+    case 'harvest': {
+      if (!flags.schema || !flags.environment) usage();
+      const r = await harvest({ environmentUrl: flags.environment, schemaName: flags.schema, genomeDir: flags.genome, tokenCommand: flags['token-command'], dryRun: flags['dry-run'] === 'true' });
+      console.log(JSON.stringify({ bot: r.bot, genome: r.genomeDir, harvested: r.harvested.map((h) => h.name), skipped: r.skipped }, null, 2));
       break;
     }
     case 'bodies':

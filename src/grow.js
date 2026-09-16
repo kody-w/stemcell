@@ -40,7 +40,7 @@ async function deployWithRetry(cfg, log, attempts = 3) {
 /**
  * @param {{
  *   friendUrl: string, friendPublicUrl?: string, genomeDir: string, learn?: string,
- *   studio: { name: string, schema: string, environment: string, publisherPrefix?: string, model?: string, tokenCommand?: string, purpose?: string },
+ *   studio: { name: string, schema: string, environment: string, publisherPrefix?: string, model?: string, tokenCommand?: string, purpose?: string, selfGrow?: boolean },
  *   workDir?: string, deploy?: boolean, force?: boolean, log?: (line: string) => void, snapshot?: string[]
  * }} cfg
  */
@@ -74,7 +74,7 @@ export async function growOnce(cfg) {
     const genome = await readGenome(genomeDir);
     const workDir = cfg.workDir || join(process.cwd(), '.stemcell', cfg.studio.schema);
     mkdirSync(workDir, { recursive: true });
-    const built = await buildStudioWorkspace(genome, { name: cfg.studio.name, schemaName: cfg.studio.schema, model: cfg.studio.model, workDir, purpose: cfg.studio.purpose, friend: { url: cfg.friendPublicUrl || cfg.friendUrl } });
+    const built = await buildStudioWorkspace(genome, { name: cfg.studio.name, schemaName: cfg.studio.schema, model: cfg.studio.model, workDir, purpose: cfg.studio.purpose, selfGrow: !!cfg.studio.selfGrow, friend: { url: cfg.friendPublicUrl || cfg.friendUrl } });
     log(`[grow] re-projected ${genome.agents.length} agents + ${genome.skills.length} skills → ${built.components.length} components; deploying ${cfg.studio.schema}`);
     deployed = await deployWithRetry({ name: cfg.studio.name, schemaName: cfg.studio.schema, publisherPrefix: cfg.studio.publisherPrefix || 'rapp', environment: cfg.studio.environment, workspace: built.workspace, workDir, model: cfg.studio.model, tokenCommand: cfg.studio.tokenCommand, log: (l) => process.stderr.write(l) }, log);
     log(`[grow] deploy ${deployed.ok ? 'ok' : 'FAILED'}${deployed.botId ? ' bot ' + deployed.botId : ''}${deployed.preview ? ' ' + deployed.preview : ''}`);
