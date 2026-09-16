@@ -58,6 +58,8 @@ function fakeBrainstem() {
     req.on('data', (c) => { data += c; });
     req.on('end', () => {
       if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ status: 'ok', agents: ['Fake'], model: 'fake-1', version: '9.9.9' })); }
+      if (req.url === '/agents') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ files: [{ filename: 'fake_agent.py', agents: ['Fake'] }] })); }
+      if (req.url === '/agents/export/fake_agent.py') { res.writeHead(200, { 'Content-Type': 'text/x-python' }); return res.end('class FakeAgent: pass\n'); }
       const body = data ? JSON.parse(data) : {};
       seen.push({ url: req.url, body });
       if (req.url === '/chat') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ response: `fake says: ${body.user_input}`, session_id: body.session_id || 's', agent_logs: '', model: 'fake-1', requested_model: 'auto' })); }
@@ -109,6 +111,9 @@ test('serve() puts the RAPP wire and the grail page in front of any body', async
     const page = await (await fetch(`${s.url}/`)).text();
     assert.match(page, /<html/i);
     for (const path of ['/login/status', '/models', '/voice', '/agents', '/version', '/diagnostics/book.json']) assert.equal((await fetch(s.url + path)).status, 200, path);
+    assert.deepEqual((await (await fetch(`${s.url}/agents`)).json()).files, [{ filename: 'fake_agent.py', agents: ['Fake'] }], 'the remote agent list is proxied so grow can watch through this server');
+    assert.equal(await (await fetch(`${s.url}/agents/export/fake_agent.py`)).text(), 'class FakeAgent: pass\n');
+    assert.equal((await fetch(`${s.url}/agents/export/nope.py`)).status, 404);
     assert.equal((await fetch(`${s.url}/nope`)).status, 404);
   } finally { await s.close(); await fake.close(); }
 });

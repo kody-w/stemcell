@@ -1,0 +1,85 @@
+{
+  "provedAt": "2026-09-16T01:13:39.278Z",
+  "ok": true,
+  "bodies": [
+    {
+      "spec": {
+        "body": "studio",
+        "environmentId": "35fb6ec1-10b0-e529-8c78-2c48a93fd517",
+        "schemaName": "rapp_Stemcell"
+      },
+      "body": "studio",
+      "label": "studio:35fb6ec1-10b0-e529-8c78-2c48a93fd517/rapp_Stemcell",
+      "setupError": null,
+      "passed": 4,
+      "total": 4,
+      "ms": 32034,
+      "turns": [
+        {
+          "prompt": "Reply with exactly the single word PONG and nothing else.",
+          "note": "the wire works and the persona answers",
+          "answer": "PONG",
+          "error": null,
+          "model": null,
+          "agent_logs": "[status] Loading Agent...",
+          "checks": [
+            {
+              "re": "^\\W*PONG\\W*$",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 12214
+        },
+        {
+          "prompt": "Use the HackerNews agent to fetch the top 1 story right now and answer with its title and URL on one line.",
+          "note": "an agent executes on this body (python on sdk/headless, the kernel on http, a profile or the friend on studio)",
+          "answer": "**Introducing System One Models and Jev** — https://typesafe.ai/blog/introducing-system-one-models-and-jev",
+          "error": null,
+          "model": null,
+          "agent_logs": "[status] Calling Phoneafriend...\n[status] Phoneafriend completed",
+          "checks": [
+            {
+              "re": "https?://",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 8414
+        },
+        {
+          "prompt": "Remember this exactly: my favorite color is teal.",
+          "note": "memory write goes to the body's store",
+          "answer": "Got it — saved to persistent memory: **my favorite color is teal.**",
+          "error": null,
+          "model": null,
+          "agent_logs": "[status] Calling Phoneafriend...\n[status] Phoneafriend completed",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 7945
+        },
+        {
+          "prompt": "What is my favorite color?",
+          "note": "memory recall from the same body",
+          "answer": "Your favorite color is **teal** — you just told me and I saved it to memory.",
+          "error": null,
+          "model": null,
+          "agent_logs": "",
+          "checks": [
+            {
+              "re": "teal",
+              "ok": true
+            }
+          ],
+          "ok": true,
+          "ms": 3460
+        }
+      ]
+    }
+  ]
+}

@@ -84,9 +84,21 @@ export function serve(brainstem, opts = {}) {
       if (path === '/voice') return send(res, 200, { voice_mode: false });
       if (path.startsWith('/voice')) return send(res, 200, {});
       if (path === '/agents' && req.method === 'GET') {
+        // the genome's files; for an http body, the remote brainstem's own list (so `stemcell grow` can watch through this server)
         const g = brainstem.genome;
-        const list = g ? g.agents.map((a) => ({ filename: a.file.split('/').pop(), agents: [a.name] })) : agentNames().map((n) => ({ filename: `${n} (on the ${brainstem.kind} body)`, agents: [n] }));
-        return send(res, 200, list);
+        const list = g ? g.agents.map((a) => ({ filename: a.file.split('/').pop(), agents: [a.name] }))
+          : brainstem.listAgents ? await brainstem.listAgents()
+            : agentNames().map((n) => ({ filename: `${n} (on the ${brainstem.kind} body)`, agents: [n] }));
+        return send(res, 200, { files: list });
+      }
+      if (path.startsWith('/agents/export/') && req.method === 'GET') {
+        const filename = decodeURIComponent(path.slice('/agents/export/'.length));
+        const g = brainstem.genome;
+        const local = g?.agents.find((a) => a.file.split('/').pop() === filename);
+        const code = local ? readFileSync(local.file, 'utf8') : brainstem.exportAgent ? await brainstem.exportAgent(filename) : null;
+        if (code == null) return send(res, 404, { error: `no agent file ${filename} on this body` });
+        res.writeHead(200, { 'Content-Type': 'text/x-python; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        return res.end(code);
       }
       if (path === '/diagnostics/book.json') return send(res, 200, {});
       return send(res, 404, { error: `no route ${req.method} ${path} on a shifted brainstem` });

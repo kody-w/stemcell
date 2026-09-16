@@ -11,7 +11,7 @@
  * so a capability the Studio body asked its friend to learn becomes a first-class
  * skill of the Studio body without anyone touching the portal.
  */
-import { existsSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createHttpBody } from './bodies/http.js';
 import { readGenome } from './genome.js';
@@ -19,7 +19,23 @@ import { buildStudioWorkspace, deployStudio } from './studio-workspace.js';
 
 export const LEARN_PROMPT = (what) => `Use the LearnNew agent with action "create" to create a new agent that ${what}. Reply with the new agent's name and file name.`;
 
-const agentFiles = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('_agent.py')) : []);
+const isAgentFile = (f) => f.endsWith('_agent.py') && f !== 'basic_agent.py' && !f.startsWith('__');
+const agentFiles = (dir) => (existsSync(dir) ? readdirSync(dir).filter(isAgentFile) : []);
+const TRANSIENT = /should be retried later|HTTP 5\d\d|ECONNRESET|EPIPE|ETIMEDOUT|socket hang up/i;
+
+/** Dataverse answers 500 "Database is currently unavailable" now and then; a growth cycle must survive that. */
+async function deployWithRetry(cfg, log, attempts = 3) {
+  let last = null;
+  for (let i = 1; i <= attempts; i++) {
+    last = await deployStudio(cfg);
+    if (last.ok) return last;
+    const tail = existsSync(last.log) ? readFileSync(last.log, 'utf8').slice(-2000) : '';
+    if (!TRANSIENT.test(tail) || i === attempts) return last;
+    log(`[grow] deploy attempt ${i} hit a transient Dataverse failure; retrying in 30 s`);
+    await new Promise((r) => setTimeout(r, 30000));
+  }
+  return last;
+}
 
 /**
  * @param {{
@@ -32,16 +48,16 @@ export async function growOnce(cfg) {
   const log = cfg.log || ((l) => console.log(l));
   const friend = createHttpBody({ url: cfg.friendUrl });
   const genomeDir = resolve(cfg.genomeDir);
-  const before = cfg.snapshot || (await friend.listAgents()).map((f) => f.filename);
+  const before = cfg.snapshot || (await friend.listAgents()).map((f) => f.filename).filter(isAgentFile);
   const learned = [];
   if (cfg.learn) {
     log(`[grow] asking the friend at ${friend.label} to learn: ${cfg.learn}`);
     const out = await friend.chat({ user_input: LEARN_PROMPT(cfg.learn), session_id: `grow-${Date.now()}` });
     log(`[grow] friend: ${(out.response || '').replace(/\s+/g, ' ').slice(0, 300)}`);
   }
-  const after = (await friend.listAgents()).map((f) => f.filename);
+  const after = (await friend.listAgents()).map((f) => f.filename).filter(isAgentFile);
   const fresh = after.filter((f) => !before.includes(f));
-  const missing = after.filter((f) => !agentFiles(join(genomeDir, 'agents')).includes(f) && f !== 'basic_agent.py');
+  const missing = after.filter((f) => !agentFiles(join(genomeDir, 'agents')).includes(f));
   const toPull = [...new Set([...fresh, ...missing])];
   const pulled = [];
   for (const filename of toPull) {
@@ -60,7 +76,7 @@ export async function growOnce(cfg) {
     mkdirSync(workDir, { recursive: true });
     const built = await buildStudioWorkspace(genome, { name: cfg.studio.name, schemaName: cfg.studio.schema, model: cfg.studio.model, workDir, purpose: cfg.studio.purpose, friend: { url: cfg.friendPublicUrl || cfg.friendUrl } });
     log(`[grow] re-projected ${genome.agents.length} agents + ${genome.skills.length} skills → ${built.components.length} components; deploying ${cfg.studio.schema}`);
-    deployed = await deployStudio({ name: cfg.studio.name, schemaName: cfg.studio.schema, publisherPrefix: cfg.studio.publisherPrefix || 'rapp', environment: cfg.studio.environment, workspace: built.workspace, workDir, model: cfg.studio.model, tokenCommand: cfg.studio.tokenCommand, log: (l) => process.stderr.write(l) });
+    deployed = await deployWithRetry({ name: cfg.studio.name, schemaName: cfg.studio.schema, publisherPrefix: cfg.studio.publisherPrefix || 'rapp', environment: cfg.studio.environment, workspace: built.workspace, workDir, model: cfg.studio.model, tokenCommand: cfg.studio.tokenCommand, log: (l) => process.stderr.write(l) }, log);
     log(`[grow] deploy ${deployed.ok ? 'ok' : 'FAILED'}${deployed.botId ? ' bot ' + deployed.botId : ''}${deployed.preview ? ' ' + deployed.preview : ''}`);
   } else if (cfg.deploy !== false) {
     log('[grow] nothing new on the friend; nothing to deploy');
@@ -75,14 +91,14 @@ export async function growOnce(cfg) {
 export async function growWatch(cfg) {
   const log = cfg.log || ((l) => console.log(l));
   const friend = createHttpBody({ url: cfg.friendUrl });
-  let snapshot = (await friend.listAgents()).map((f) => f.filename);
+  let snapshot = (await friend.listAgents()).map((f) => f.filename).filter(isAgentFile);
   log(`[grow] watching ${friend.label} every ${Math.round((cfg.everyMs || 30000) / 1000)}s; ${snapshot.length} agents there now`);
   let cycles = 0;
   for (;;) {
     await new Promise((r) => setTimeout(r, cfg.everyMs || 30000));
     const now = (await friend.listAgents().catch(() => null));
     if (!now) { log('[grow] friend unreachable; will retry'); continue; }
-    const names = now.map((f) => f.filename);
+    const names = now.map((f) => f.filename).filter(isAgentFile);
     if (names.some((f) => !snapshot.includes(f))) {
       const r = await growOnce({ ...cfg, learn: undefined, snapshot });
       cfg.onCycle?.(r);
