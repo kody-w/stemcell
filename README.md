@@ -1,5 +1,9 @@
 # stemcell
 
+<!-- rapp1:network-header:start -->
+[![RAPP/1](https://kody-w.github.io/rapp-hive-public/portfolio/badges/stemcell.svg)](https://github.com/kody-w/rapp-hive-public/blob/main/portfolio/repos/stemcell.md) · **New to RAPP?** [Start here: get your Brainstem →](https://github.com/kody-w/rapp-installer#start-here)
+<!-- rapp1:network-header:end -->
+
 **The RAPP brainstem, wherever you need it.** One genome (a `soul.md`, `agents/*_agent.py`, `SKILL.md` skills, memory keyed by `user_guid`), any body, the same wire. A stem cell is pluripotent: it becomes whatever tissue the organism needs and it keeps growing. So does this brainstem.
 
 ```
